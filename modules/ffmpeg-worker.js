@@ -6,6 +6,8 @@
 
 let ffmpeg = null;
 let isLoaded = false;
+let currentTask = null; // 当前执行的任务
+let isCancelled = false; // 取消标志
 
 // 导入FFmpeg
 async function initFFmpeg() {
@@ -77,13 +79,18 @@ async function convertVideo(data) {
     
     const {
         preset = 'ultrafast',
-        crf = 28,
-        audioBitrate = '96k',
+        crf = 30,                // 稍微降低质量以提升速度
+        audioBitrate = '64k',    // 降低音频比特率
         fastMode = true
     } = options;
 
     try {
         self.postMessage({ type: 'log', message: '开始转换 WebM 到 MP4...' });
+
+        // 检查是否被取消
+        if (isCancelled) {
+            throw new Error('转换已被用户取消');
+        }
 
         // 写入输入文件
         const inputData = new Uint8Array(webmBuffer);
@@ -94,25 +101,41 @@ async function convertVideo(data) {
         // 始终使用重编码模式以确保兼容性
         self.postMessage({ type: 'log', message: '使用重编码模式确保MP4兼容性...' });
         command = command.concat([
-            '-c:v', 'libx264',           // 强制使用H.264编码
+            '-c:v', 'libx264',           // H.264编码
             '-preset', preset,
             '-tune', 'zerolatency',
             '-crf', crf.toString(),
-            '-pix_fmt', 'yuv420p',       // 确保像素格式兼容
-            '-profile:v', 'baseline',    // 使用baseline profile确保最大兼容性
-            '-level:v', '3.0',           // 设置H.264 level
-            '-c:a', 'aac',               // 强制使用AAC音频编码
+            '-pix_fmt', 'yuv420p',
+            '-profile:v', 'baseline',
+            '-level:v', '3.0',
+            // 速度优化参数
+            '-x264-params', 'ref=1:me=dia:subme=2:mixed-refs=0:trellis=0:weightp=0:weightb=0:8x8dct=0:fast-pskip=1',
+            '-g', '30',                  // GOP大小，减少复杂度
+            '-bf', '0',                  // 禁用B帧以提升速度
+            // 音频优化
+            '-c:a', 'aac',
             '-b:a', audioBitrate,
             '-ac', '2',                  // 双声道
-            '-ar', '44100',              // 标准采样率
-            '-movflags', '+faststart',   // 优化流媒体播放
-            '-threads', '0',             // 使用所有可用线程
-            '-f', 'mp4',                 // 确保MP4格式
+            '-ar', '22050',              // 降低采样率到22kHz
+            '-movflags', '+faststart',
+            '-threads', '0',
+            '-f', 'mp4',
             'output.mp4'
         ]);
 
+        // 执行转换前再次检查取消状态
+        if (isCancelled) {
+            throw new Error('转换已被用户取消');
+        }
+
         // 执行转换
         await ffmpeg.exec(command);
+        
+        // 转换完成后检查取消状态
+        if (isCancelled) {
+            throw new Error('转换已被用户取消');
+        }
+        
         self.postMessage({ type: 'log', message: 'H.264/AAC重编码完成' });
 
         // 读取输出文件
@@ -145,6 +168,39 @@ async function convertVideo(data) {
     }
 }
 
+// 取消当前任务
+function cancelCurrentTask() {
+    isCancelled = true;
+    if (currentTask) {
+        self.postMessage({ type: 'log', message: 'Worker收到取消请求' });
+        // 注意：FFmpeg.wasm没有直接的取消方法，但我们可以设置标志
+        // 实际的取消会在下次检查点生效
+    }
+}
+
+// 重置Worker状态
+async function resetWorkerState() {
+    isCancelled = false;
+    currentTask = null;
+    
+    // 清理可能残留的临时文件
+    if (ffmpeg && isLoaded) {
+        try {
+            const files = ['input.webm', 'output.mp4', 'input_video.webm', 'background.jpg', 'output_composite.mp4'];
+            for (const file of files) {
+                try {
+                    await ffmpeg.deleteFile(file);
+                } catch (e) {
+                    // 文件可能不存在，忽略错误
+                }
+            }
+            self.postMessage({ type: 'log', message: 'Worker状态已重置' });
+        } catch (error) {
+            self.postMessage({ type: 'log', message: `⚠️ 清理临时文件时出错: ${error.message}` });
+        }
+    }
+}
+
 // Worker消息处理
 self.onmessage = async function(e) {
     const { type, data } = e.data;
@@ -155,11 +211,26 @@ self.onmessage = async function(e) {
             break;
             
         case 'convert':
+            currentTask = 'convert';
+            isCancelled = false;
             await convertVideo(data);
+            currentTask = null;
             break;
             
         case 'composite':
+            currentTask = 'composite';
+            isCancelled = false;
             await compositeVideo(data);
+            currentTask = null;
+            break;
+            
+        case 'cancel':
+            cancelCurrentTask();
+            break;
+            
+        case 'reset':
+            await resetWorkerState();
+            self.postMessage({ type: 'reset_complete' });
             break;
             
         default:
@@ -173,7 +244,7 @@ self.onmessage = async function(e) {
 // 合成视频和背景
 async function compositeVideo(data) {
     const { videoBuffer, options } = data;
-    const { pptBackground, videoScale, overlayPosition, outputSize } = options;
+    const { pptBackground, videoScale, overlayPosition, outputSize, autoTrimStart = true } = options;
     
     try {
         self.postMessage({ type: 'log', message: '🎬 Worker开始背景合成...' });
@@ -182,6 +253,14 @@ async function compositeVideo(data) {
         const videoData = new Uint8Array(videoBuffer);
         await ffmpeg.writeFile('input_video.webm', videoData);
         self.postMessage({ type: 'log', message: `📹 输入视频大小: ${videoData.length} bytes` });
+
+        // 检测视频开始时间（可选）
+        let startTime = 0;
+        if (autoTrimStart) {
+            // 简化实现：暂时不进行复杂的检测
+            self.postMessage({ type: 'log', message: '📹 自动裁剪功能已启用，但暂时不执行复杂检测' });
+            startTime = 0; // 保持为0，避免复杂的Worker间通信
+        }
 
         // 获取PPT背景图片
         self.postMessage({ type: 'log', message: '📋 加载PPT背景图片...' });
@@ -229,6 +308,14 @@ async function compositeVideo(data) {
         const command = [
             '-loop', '1',                     // 循环背景图片
             '-i', 'background.jpg',           // 背景图片
+        ];
+        
+        // 如果需要裁剪开头，添加 -ss 参数
+        if (startTime > 0) {
+            command.push('-ss', startTime.toString());
+        }
+        
+        command.push(
             '-i', 'input_video.webm',         // 输入视频
             '-filter_complex', 
             `[0:v]scale=${evenOutputSize}[bg];[1:v]scale=${videoScale}[small];[bg][small]overlay=${overlayPosition}:shortest=1[v]`,
@@ -243,7 +330,7 @@ async function compositeVideo(data) {
             '-avoid_negative_ts', 'make_zero', // 避免时间戳问题
             '-t', '30',                       // 限制最长30秒（防止卡死）
             'output_composite.mp4'
-        ];
+        );
 
         self.postMessage({ type: 'log', message: `🔧 FFmpeg合成命令: ${command.join(' ')}` });
         

@@ -15,6 +15,8 @@ class OptimizedFFmpegConverter {
         this.conversionPromise = null;
         this.memoryPool = new Map(); // 内存池用于重用ArrayBuffer
         this.maxPoolSize = 5;        // 最大缓存数量
+        this.isCancelled = false;    // 取消标志
+        this.currentReject = null;   // 当前Promise的reject函数
     }
 
     // 初始化转换器
@@ -119,9 +121,18 @@ class OptimizedFFmpegConverter {
     getOptimalSettings(fileSize, duration = 5) {
         const fileSizeMB = fileSize / (1024 * 1024);
         
-        // 根据文件大小和时长智能选择参数
+        // 根据文件大小和时长智能选择参数 - 全面优化速度
         if (fileSizeMB < 1) {
-            // 小文件：优先速度
+            // 小文件：极速模式
+            return {
+                preset: 'ultrafast',
+                crf: 32,                // 更低质量，更高速度
+                audioBitrate: '48k',    // 更低音频比特率
+                fastMode: true,
+                priority: 'speed'
+            };
+        } else if (fileSizeMB < 5) {
+            // 中等文件：速度优先
             return {
                 preset: 'ultrafast',
                 crf: 30,
@@ -129,23 +140,14 @@ class OptimizedFFmpegConverter {
                 fastMode: true,
                 priority: 'speed'
             };
-        } else if (fileSizeMB < 5) {
-            // 中等文件：平衡速度和质量
-            return {
-                preset: 'ultrafast',
-                crf: 28,
-                audioBitrate: '96k',
-                fastMode: true,
-                priority: 'balanced'
-            };
         } else {
-            // 大文件：优先质量，但仍保持较快速度
+            // 大文件：仍然优先速度
             return {
-                preset: 'veryfast',
-                crf: 26,
-                audioBitrate: '128k',
+                preset: 'ultrafast',    // 改为ultrafast
+                crf: 28,
+                audioBitrate: '80k',    // 降低比特率
                 fastMode: true,
-                priority: 'quality'
+                priority: 'speed'
             };
         }
     }
@@ -155,6 +157,10 @@ class OptimizedFFmpegConverter {
         if (!this.isLoaded) {
             throw new Error('转换器未初始化，请先调用 init()');
         }
+
+        // 重置取消标志 - 新的转换开始时清除之前的取消状态
+        this.isCancelled = false;
+        this.currentReject = null;
 
         // 防止并发转换
         if (this.conversionPromise) {
@@ -187,7 +193,22 @@ class OptimizedFFmpegConverter {
         return new Promise(async (resolve, reject) => {
             const startTime = Date.now();
             
+            // 保存reject函数以便取消时使用
+            this.currentReject = reject;
+            this.isCancelled = false;
+            
+            // 检查是否已被取消
+            if (this.isCancelled) {
+                reject(new Error('转换已被取消'));
+                return;
+            }
+            
             this.worker.onmessage = (e) => {
+                // 如果已被取消，忽略所有消息
+                if (this.isCancelled) {
+                    return;
+                }
+                
                 const { type, buffer, percent, time, message } = e.data;
                 
                 switch (type) {
@@ -200,24 +221,42 @@ class OptimizedFFmpegConverter {
                         break;
                         
                     case 'completed':
+                        this.currentReject = null;
                         const convertTime = ((Date.now() - startTime) / 1000).toFixed(2);
                         const mp4Blob = new Blob([buffer], { type: 'video/mp4' });
                         if (this.onLog) this.onLog(`✅ Worker转换完成！耗时 ${convertTime} 秒`);
                         resolve(mp4Blob);
                         break;
                         
+                    case 'reset_complete':
+                        if (this.onLog) this.onLog('Worker状态重置完成');
+                        break;
+                        
                     case 'error':
+                        this.currentReject = null;
                         reject(new Error(message));
                         break;
                 }
             };
             
-            // 发送转换命令 - 不使用Transferable Objects以确保兼容性
-            const webmBuffer = await webmBlob.arrayBuffer();
-            this.worker.postMessage({
-                type: 'convert',
-                data: { webmBuffer, options }
-            });
+            try {
+                // 发送转换命令 - 不使用Transferable Objects以确保兼容性
+                const webmBuffer = await webmBlob.arrayBuffer();
+                
+                // 再次检查是否已被取消
+                if (this.isCancelled) {
+                    reject(new Error('转换已被取消'));
+                    return;
+                }
+                
+                this.worker.postMessage({
+                    type: 'convert',
+                    data: { webmBuffer, options }
+                });
+            } catch (error) {
+                this.currentReject = null;
+                reject(error);
+            }
         });
     }
 
@@ -313,6 +352,10 @@ class OptimizedFFmpegConverter {
             throw new Error('转换器未初始化，请先调用 init()');
         }
 
+        // 重置取消标志 - 新的合成开始时清除之前的取消状态
+        this.isCancelled = false;
+        this.currentReject = null;
+
         const { pptBackground, videoScale, overlayPosition, outputSize } = options;
 
         try {
@@ -373,7 +416,7 @@ class OptimizedFFmpegConverter {
 
     // 直接模式合成
     async compositeDirect(videoBlob, options) {
-        const { pptBackground, videoScale, overlayPosition, outputSize } = options;
+        const { pptBackground, videoScale, overlayPosition, outputSize, autoTrimStart = true } = options;
 
         try {
             if (this.onLog) this.onLog('📹 直接模式背景合成...');
@@ -382,6 +425,21 @@ class OptimizedFFmpegConverter {
             const videoData = new Uint8Array(await videoBlob.arrayBuffer());
             await this.ffmpeg.writeFile('input_video.webm', videoData);
             if (this.onLog) this.onLog(`📹 输入视频大小: ${videoData.length} bytes`);
+
+            // 检测视频开始时间（可选）
+            let startTime = 0;
+            if (autoTrimStart) {
+                if (this.onLog) this.onLog('🔍 [视频检测] 开始检测视频实际开始时间...');
+                startTime = await this.detectVideoStart('input_video.webm');
+                if (startTime > 0) {
+                    if (this.onLog) this.onLog(`✂️ [视频检测] 检测到视频实际开始时间: ${startTime.toFixed(2)}秒，将自动裁剪`);
+                    if (this.onLog) this.onLog(`📐 [视频检测] 裁剪设置: 从${startTime.toFixed(2)}秒开始，跳过前面的静态部分`);
+                } else {
+                    if (this.onLog) this.onLog('📹 [视频检测] 视频从开头就有内容，无需裁剪');
+                }
+            } else {
+                if (this.onLog) this.onLog('📹 [视频检测] 自动裁剪功能已禁用');
+            }
 
             // 读取PPT背景图片
             const response = await fetch(pptBackground);
@@ -403,6 +461,14 @@ class OptimizedFFmpegConverter {
             const command = [
                 '-loop', '1',                     // 循环背景图片
                 '-i', 'background.jpg',           // 背景图片
+            ];
+            
+            // 如果需要裁剪开头，添加 -ss 参数
+            if (startTime > 0) {
+                command.push('-ss', startTime.toString());
+            }
+            
+            command.push(
                 '-i', 'input_video.webm',         // 输入视频
                 '-filter_complex', 
                 `[0:v]scale=${evenOutputSize}[bg];[1:v]scale=${videoScale}[small];[bg][small]overlay=${overlayPosition}:shortest=1[v]`,
@@ -416,7 +482,7 @@ class OptimizedFFmpegConverter {
                 '-pix_fmt', 'yuv420p',           // 像素格式
                 '-t', '30',                       // 限制最长30秒（防止卡死）
                 'output_composite.mp4'
-            ];
+            );
 
             if (this.onLog) this.onLog(`🔧 FFmpeg合成命令: ${command.join(' ')}`);
             
@@ -460,8 +526,125 @@ class OptimizedFFmpegConverter {
         }
     }
 
+    // 检测视频实际开始时间（跳过静态开头部分）
+    async detectVideoStart(inputFile) {
+        try {
+            if (this.onLog) this.onLog('🔍 [场景检测] 开始分析视频场景变化...');
+            
+            // 使用场景检测找到第一个显著变化的时间点
+            const command = [
+                '-i', inputFile,
+                '-vf', 'select=gt(scene\\,0.1)',  // 场景变化阈值0.1
+                '-vsync', 'vfr',
+                '-f', 'null',
+                '-'
+            ];
+
+            if (this.onLog) this.onLog(`🔍 [场景检测] FFmpeg命令: ${command.join(' ')}`);
+
+            // 捕获FFmpeg输出
+            let logOutput = '';
+            const originalOnLog = this.ffmpeg.on;
+            
+            // 临时捕获日志
+            if (this.ffmpeg.on) {
+                this.ffmpeg.on('log', ({ message }) => {
+                    logOutput += message + '\n';
+                    // 实时显示FFmpeg分析日志
+                    if (this.onLog && message.includes('pts_time')) {
+                        this.onLog(`🔍 [场景检测] FFmpeg输出: ${message.trim()}`);
+                    }
+                });
+            }
+
+            if (this.onLog) this.onLog('🔍 [场景检测] 执行场景检测命令...');
+            await this.ffmpeg.exec(command);
+            
+            if (this.onLog) this.onLog(`🔍 [场景检测] 命令执行完成，分析输出日志 (${logOutput.length}字符)`);
+
+            // 解析输出中的时间戳
+            const lines = logOutput.split('\n');
+            let foundScenes = [];
+            
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                if (line.includes('pts_time')) {
+                    const timeMatch = line.match(/pts_time:(\d+\.?\d*)/);
+                    if (timeMatch) {
+                        const sceneTime = parseFloat(timeMatch[1]);
+                        foundScenes.push(sceneTime);
+                        if (this.onLog) this.onLog(`🎯 [场景检测] 发现场景变化 #${foundScenes.length}: ${sceneTime.toFixed(2)}秒`);
+                    }
+                }
+            }
+            
+            if (this.onLog) this.onLog(`🔍 [场景检测] 总共发现 ${foundScenes.length} 个场景变化`);
+            
+            if (foundScenes.length > 0) {
+                const firstSceneTime = foundScenes[0];
+                if (this.onLog) this.onLog(`🎯 [场景检测] 第一个场景变化: ${firstSceneTime.toFixed(2)}秒`);
+                
+                // 如果变化在合理范围内（0.3-10秒），认为是有效的开始时间
+                if (firstSceneTime >= 0.3 && firstSceneTime <= 10.0) {
+                    const startTime = Math.max(0, firstSceneTime - 0.1); // 提前0.1秒开始
+                    if (this.onLog) this.onLog(`✂️ [场景检测] 设置开始时间: ${startTime.toFixed(2)}秒 (原场景时间-0.1秒)`);
+                    return startTime;
+                } else {
+                    if (this.onLog) this.onLog(`⚠️ [场景检测] 第一个场景变化时间不合理: ${firstSceneTime.toFixed(2)}秒 (应在0.3-10秒范围内)`);
+                }
+            } else {
+                if (this.onLog) this.onLog('📹 [场景检测] 未检测到任何场景变化');
+            }
+
+            if (this.onLog) this.onLog('📹 [场景检测] 结论：从原始位置开始，无需裁剪');
+            return 0;
+
+        } catch (error) {
+            if (this.onLog) this.onLog(`⚠️ [场景检测] 检测失败: ${error.message}，从原始位置开始`);
+            return 0;
+        }
+    }
+
+    // 取消当前转换
+    cancelConversion() {
+        if (this.onLog) this.onLog('🛑 用户请求取消转换...');
+        
+        this.isCancelled = true;
+        
+        if (this.currentReject) {
+            this.currentReject(new Error('转换已被用户取消'));
+            this.currentReject = null;
+        }
+        
+        // 清除转换Promise，避免阻塞后续转换
+        this.conversionPromise = null;
+        
+        // 如果使用Worker，发送取消消息而不是终止Worker
+        if (this.useWorker && this.worker) {
+            if (this.onLog) this.onLog('发送取消请求到Worker...');
+            this.worker.postMessage({ type: 'cancel' });
+            
+            // 重置Worker状态以便下次使用
+            setTimeout(() => {
+                if (this.worker) {
+                    this.worker.postMessage({ type: 'reset' });
+                }
+            }, 100);
+        }
+        
+        // 如果使用直接模式，FFmpeg没有直接的取消方法，但我们设置取消标志
+        if (!this.useWorker && this.ffmpeg) {
+            if (this.onLog) this.onLog('🛑 设置取消标志（直接模式）...');
+            // 注意：FFmpeg.wasm 没有直接的取消方法，但我们可以通过Promise rejection来处理
+        }
+        
+        if (this.onLog) this.onLog('✅ 取消请求已发送');
+    }
+
     // 清理资源
     destroy() {
+        this.cancelConversion(); // 先取消任何进行中的转换
+        
         if (this.worker) {
             this.worker.terminate();
             this.worker = null;
@@ -470,6 +653,8 @@ class OptimizedFFmpegConverter {
         this.isLoaded = false;
         this.conversionPromise = null;
         this.memoryPool.clear(); // 清理内存池
+        this.isCancelled = false;
+        this.currentReject = null;
     }
 }
 
