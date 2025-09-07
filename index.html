@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>优化版 WebM to MP4 转换器</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .header .subtitle {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+
+        .section {
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
+        }
+
+        video {
+            width: 100%;
+            background: #000;
+            border-radius: 10px;
+            margin: 10px 0;
+        }
+
+        .log {
+            background: #2d2d2d;
+            color: #f0f0f0;
+            padding: 15px;
+            border-radius: 10px;
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            margin: 10px 0;
+        }
+
+        .progress-container {
+            background: #f0f0f0;
+            border-radius: 10px;
+            height: 8px;
+            margin: 15px 0;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100%;
+            width: 0%;
+            transition: width 0.3s ease;
+            border-radius: 10px;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 15px 0;
+        }
+
+        .stat-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 0.9rem;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            color: #333;
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+
+        .camera-status {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .camera-on {
+            background-color: #4CAF50;
+            box-shadow: 0 0 5px rgba(76, 175, 80, 0.5);
+        }
+
+        .camera-off {
+            background-color: #f44336;
+        }
+
+        .optimization-info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border-left: 4px solid #2196f3;
+        }
+
+        .optimization-info h3 {
+            margin: 0 0 10px 0;
+            color: #1976d2;
+        }
+
+        .optimization-info ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+
+        .optimization-info li {
+            margin: 5px 0;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>优化版 WebM to MP4 转换器</h1>
+            <div class="subtitle">高性能转换 · Web Worker · 智能参数 · GitHub Pages 兼容</div>
+        </div>
+
+        <div class="optimization-info">
+            <h3>🚀 性能优化特性</h3>
+            <ul>
+                <li><strong>快速复制模式:</strong> 优先使用流复制，避免重编码，提速5-10倍</li>
+                <li><strong>Web Worker:</strong> 后台转换，不阻塞界面</li>
+                <li><strong>智能参数:</strong> 根据文件大小自动选择最优设置</li>
+                <li><strong>多线程处理:</strong> 充分利用CPU多核性能</li>
+                <li><strong>GitHub Pages兼容:</strong> 不使用SharedArrayBuffer</li>
+            </ul>
+        </div>
+
+        <div class="section">
+            <div style="text-align: center;">
+                <span class="camera-status" id="cameraStatus"></span>
+                <span id="cameraStatusText">摄像头状态</span>
+                <br><br>
+                <button class="btn" id="recordBtn">开始录制</button>
+                <button class="btn" id="convertBtn" disabled>转换为 MP4</button>
+                <button class="btn btn-success" id="downloadBtn" disabled style="display: none;">下载 MP4</button>
+                <button class="btn btn-danger" id="closeCameraBtn" disabled style="display: none;">关闭摄像头</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <video id="video" autoplay muted></video>
+        </div>
+
+        <div class="section">
+            <div class="progress-container" id="progressContainer" style="display: none;">
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="stats" id="stats" style="display: none;">
+                <div class="stat-item">
+                    <div class="stat-label">原始大小</div>
+                    <div class="stat-value" id="webmSize">-</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">转换后大小</div>
+                    <div class="stat-value" id="mp4Size">-</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">转换耗时</div>
+                    <div class="stat-value" id="convertTime">-</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">压缩效果</div>
+                    <div class="stat-value" id="compressionRatio">-</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>转换日志</h3>
+            <div id="log" class="log">等待初始化...</div>
+        </div>
+    </div>
+
+    <script type="module">
+        import OptimizedFFmpegConverter from './modules/ffmpeg-converter-optimized.js';
+
+        // DOM 元素
+        const elements = {
+            recordBtn: document.getElementById('recordBtn'),
+            convertBtn: document.getElementById('convertBtn'),
+            downloadBtn: document.getElementById('downloadBtn'),
+            closeCameraBtn: document.getElementById('closeCameraBtn'),
+            video: document.getElementById('video'),
+            progressContainer: document.getElementById('progressContainer'),
+            progressBar: document.getElementById('progressBar'),
+            log: document.getElementById('log'),
+            stats: document.getElementById('stats'),
+            webmSize: document.getElementById('webmSize'),
+            mp4Size: document.getElementById('mp4Size'),
+            convertTime: document.getElementById('convertTime'),
+            compressionRatio: document.getElementById('compressionRatio'),
+            cameraStatus: document.getElementById('cameraStatus'),
+            cameraStatusText: document.getElementById('cameraStatusText')
+        };
+
+        // 状态变量
+        let converter = null;
+        let mediaRecorder = null;
+        let stream = null;
+        let webmBlob = null;
+        let mp4Blob = null;
+        let isRecording = false;
+        let recordedChunks = [];
+        let recordingTimer = null;
+        let recordingSeconds = 0;
+        let cameraInitialized = false;
+        let videoDuration = 0; // 存储视频总时长
+        let isConverting = false; // 转换状态标志
+        let conversionStartTime = 0; // 转换开始时间
+
+        // 工具函数
+        const utils = {
+            log: (message) => {
+                const timestamp = new Date().toLocaleTimeString();
+                console.log(message);
+                elements.log.textContent += `[${timestamp}] ${message}\n`;
+                elements.log.scrollTop = elements.log.scrollHeight;
+            },
+
+            updateProgress: (percent, currentTime = null) => {
+                // 完全忽略FFmpeg的百分比，只使用时间计算进度
+                let realPercent = 0;
+                if (currentTime && videoDuration > 0) {
+                    realPercent = Math.min(Math.round((currentTime / videoDuration) * 100), 100);
+                    utils.log(`🔄 计算进度: ${currentTime.toFixed(2)}s / ${videoDuration.toFixed(2)}s = ${realPercent}%`);
+                } else if (percent === 100) {
+                    // 只有当FFmpeg明确报告100%时才认为完成
+                    realPercent = 100;
+                    utils.log(`🔄 FFmpeg报告完成: ${realPercent}%`);
+                }
+                
+                // 更新转换按钮文本显示进度，不显示进度条
+                if (isConverting) {
+                    // 转换过程中，始终显示进度
+                    if (realPercent >= 100) {
+                        elements.convertBtn.textContent = '转换完成';
+                        elements.convertBtn.disabled = true;
+                        utils.log(`🔄 按钮更新为: 转换完成`);
+                    } else {
+                        const displayPercent = Math.max(realPercent, 0);
+                        elements.convertBtn.textContent = `转换中… ${displayPercent}%`;
+                        elements.convertBtn.disabled = true;
+                        utils.log(`🔄 按钮更新为: 转换中… ${displayPercent}%`);
+                    }
+                } else {
+                    // 不在转换状态时的默认显示
+                    elements.convertBtn.textContent = '转换为 MP4';
+                    elements.convertBtn.disabled = false;
+                    utils.log(`🔄 按钮重置为: 转换为 MP4`);
+                }
+                // 不显示进度条
+                elements.progressContainer.style.display = 'none';
+            },
+
+            formatFileSize: (bytes) => {
+                if (bytes === 0) return '0 Bytes';
+                const k = 1024;
+                const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+            },
+
+            downloadFile: (blob, filename) => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            },
+
+            // 验证MP4文件是否可以播放
+            validateMP4: (mp4Blob) => {
+                return new Promise((resolve, reject) => {
+                    const url = URL.createObjectURL(mp4Blob);
+                    const testVideo = document.createElement('video');
+                    testVideo.muted = true;
+                    testVideo.preload = 'metadata';
+                    
+                    let isResolved = false;
+                    
+                    // 设置超时
+                    const timeout = setTimeout(() => {
+                        if (!isResolved) {
+                            isResolved = true;
+                            cleanup();
+                            reject(new Error('验证超时：文件可能已损坏'));
+                        }
+                    }, 10000); // 10秒超时
+                    
+                    const cleanup = () => {
+                        clearTimeout(timeout);
+                        testVideo.pause();
+                        URL.revokeObjectURL(url);
+                        testVideo.remove();
+                    };
+                    
+                    // 成功处理
+                    const handleSuccess = () => {
+                        if (!isResolved) {
+                            isResolved = true;
+                            utils.log(`✅ MP4验证成功 - 时长: ${testVideo.duration.toFixed(2)}秒, 尺寸: ${testVideo.videoWidth}x${testVideo.videoHeight}`);
+                            
+                            // 在页面显示（使用新的URL）
+                            const displayUrl = URL.createObjectURL(mp4Blob);
+                            elements.video.src = displayUrl;
+                            elements.video.controls = true;
+                            elements.video.muted = false;
+                            utils.log('MP4文件已在页面上显示');
+                            
+                            cleanup();
+                            resolve();
+                        }
+                    };
+                    
+                    // 错误处理
+                    const handleError = (errorMsg) => {
+                        if (!isResolved) {
+                            isResolved = true;
+                            utils.log(`❌ MP4验证失败: ${errorMsg}`);
+                            cleanup();
+                            reject(new Error(`文件验证失败: ${errorMsg}`));
+                        }
+                    };
+                    
+                    testVideo.onloadedmetadata = () => {
+                        // 检查基本信息
+                        if (testVideo.duration > 0 && testVideo.videoWidth > 0 && testVideo.videoHeight > 0) {
+                            handleSuccess();
+                        } else {
+                            handleError('视频文件信息不完整');
+                        }
+                    };
+                    
+                    testVideo.onerror = (error) => {
+                        const errorMsg = error.target?.error?.message || '文件格式错误';
+                        handleError(errorMsg);
+                    };
+                    
+                    // 开始加载
+                    testVideo.src = url;
+                });
+            },
+
+            updateCameraStatus: (isOn, isRecording = false, seconds = 0) => {
+                if (isRecording) {
+                    elements.cameraStatus.className = 'camera-status camera-on';
+                    elements.cameraStatusText.textContent = `录制中… (${seconds}秒)`;
+                    elements.closeCameraBtn.style.display = 'none';
+                } else if (isOn) {
+                    elements.cameraStatus.className = 'camera-status camera-on';
+                    elements.cameraStatusText.textContent = '摄像头已开启';
+                    elements.closeCameraBtn.style.display = 'inline-block';
+                    elements.closeCameraBtn.disabled = false;
+                } else {
+                    elements.cameraStatus.className = 'camera-status camera-off';
+                    elements.cameraStatusText.textContent = '摄像头未开启';
+                    elements.closeCameraBtn.style.display = 'none';
+                }
+            },
+
+            updateRecordButton: () => {
+                if (!cameraInitialized) {
+                    elements.recordBtn.textContent = '开启摄像头';
+                    elements.recordBtn.disabled = false;
+                } else if (isRecording) {
+                    elements.recordBtn.textContent = '停止录制';
+                    elements.recordBtn.disabled = false;
+                } else {
+                    elements.recordBtn.textContent = '开始录制';
+                    elements.recordBtn.disabled = false;
+                }
+            }
+        };
+
+        // 初始化摄像头
+        async function initCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { width: 640, height: 480, facingMode: 'user' },
+                    audio: true 
+                });
+                
+                elements.video.srcObject = stream;
+                cameraInitialized = true;
+                utils.updateCameraStatus(true);
+                utils.updateRecordButton();
+                utils.log('摄像头初始化成功');
+                
+            } catch (error) {
+                cameraInitialized = false;
+                utils.updateCameraStatus(false);
+                utils.updateRecordButton();
+                utils.log(`摄像头初始化失败: ${error.message}`);
+            }
+        }
+
+        // 关闭摄像头
+        function closeCamera() {
+            if (stream) {
+                stream.getTracks().forEach(track => {
+                    track.stop();
+                    utils.log(`关闭 ${track.kind} 轨道`);
+                });
+                stream = null;
+                elements.video.srcObject = null;
+                cameraInitialized = false;
+                utils.updateCameraStatus(false);
+                utils.updateRecordButton();
+                utils.log('摄像头已关闭');
+                
+                // 重置录制状态
+                isRecording = false;
+                if (recordingTimer) {
+                    clearInterval(recordingTimer);
+                    recordingTimer = null;
+                }
+            }
+        }
+
+        // 主按钮处理函数
+        function handleMainButton() {
+            if (!cameraInitialized) {
+                // 开启摄像头
+                initCamera();
+            } else if (!isRecording) {
+                // 开始录制前重置状态
+                resetConversionState();
+                startRecording();
+            } else {
+                // 停止录制
+                stopRecording();
+            }
+        }
+
+        // 重置转换相关状态
+        function resetConversionState() {
+            webmBlob = null;
+            mp4Blob = null;
+            elements.convertBtn.style.display = 'none';
+            elements.downloadBtn.style.display = 'none';
+            elements.downloadBtn.disabled = true;
+            elements.stats.style.display = 'none';
+            utils.log('已重置转换状态');
+        }
+
+        function startRecording() {
+            if (!stream) {
+                utils.log('请先初始化摄像头');
+                return;
+            }
+
+            recordedChunks = [];
+            isRecording = true;
+            recordingSeconds = 0;
+            utils.updateRecordButton();
+
+            // 录制时静音视频以避免回声
+            elements.video.muted = true;
+            utils.log('录制开始，视频已静音以避免回声');
+
+            // 开始录制计时器
+            recordingTimer = setInterval(() => {
+                recordingSeconds++;
+                utils.updateCameraStatus(true, true, recordingSeconds);
+            }, 1000);
+
+            // 初始显示录制状态
+            utils.updateCameraStatus(true, true, 0);
+
+            let mimeType = 'video/webm;codecs=vp9,opus';
+            if (!MediaRecorder.isTypeSupported(mimeType)) {
+                mimeType = 'video/webm;codecs=vp8,opus';
+            }
+            if (!MediaRecorder.isTypeSupported(mimeType)) {
+                mimeType = 'video/webm';
+            }
+
+            mediaRecorder = new MediaRecorder(stream, { mimeType });
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                // 停止计时器
+                if (recordingTimer) {
+                    clearInterval(recordingTimer);
+                    recordingTimer = null;
+                }
+
+                webmBlob = new Blob(recordedChunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(webmBlob);
+                
+                elements.video.srcObject = null;
+                elements.video.src = url;
+                elements.video.controls = true;
+                elements.video.muted = false; // 恢复声音用于回放
+                
+                // 获取视频时长 - 增强版本
+                elements.video.onloadedmetadata = () => {
+                    const duration = elements.video.duration;
+                    if (duration && duration !== Infinity && !isNaN(duration)) {
+                        videoDuration = duration;
+                        utils.log(`✅ 视频时长已获取: ${videoDuration.toFixed(2)}秒`);
+                    } else {
+                        utils.log(`⚠️ 视频时长获取异常: ${duration}，尝试重新获取...`);
+                        // 延迟重试获取时长
+                        setTimeout(() => {
+                            const retryDuration = elements.video.duration;
+                            if (retryDuration && retryDuration !== Infinity && !isNaN(retryDuration)) {
+                                videoDuration = retryDuration;
+                                utils.log(`✅ 重试获取视频时长成功: ${videoDuration.toFixed(2)}秒`);
+                            } else {
+                                utils.log(`❌ 重试后仍无法获取正确时长: ${retryDuration}`);
+                                // 作为备用方案，尝试从录制时间计算
+                                if (recordingSeconds > 0) {
+                                    videoDuration = recordingSeconds;
+                                    utils.log(`📝 使用录制时间作为备用时长: ${videoDuration.toFixed(2)}秒`);
+                                }
+                            }
+                        }, 1000);
+                    }
+                };
+                
+                // 添加错误处理
+                elements.video.onerror = (e) => {
+                    utils.log(`❌ 视频加载错误: ${e.message || '未知错误'}`);
+                };
+                
+                elements.webmSize.textContent = utils.formatFileSize(webmBlob.size);
+                elements.stats.style.display = 'grid';
+                elements.convertBtn.disabled = false;
+                elements.convertBtn.style.display = 'inline-block';
+                elements.convertBtn.textContent = '转换为 MP4';
+                
+                // 隐藏下载按钮，重置状态
+                elements.downloadBtn.style.display = 'none';
+                elements.downloadBtn.disabled = true;
+                
+                utils.log(`录制完成，文件大小: ${utils.formatFileSize(webmBlob.size)}`);
+                utils.log('录制回放已恢复声音');
+                
+                // 录制完成后自动关闭摄像头
+                utils.log('录制完成，自动关闭摄像头以节省资源');
+                closeCamera();
+            };
+
+            mediaRecorder.start();
+            utils.log('开始录制...');
+
+            // 5分钟后自动停止
+            setTimeout(() => {
+                if (isRecording) {
+                    stopRecording();
+                    utils.log('已达到最大录制时长(5分钟)，自动停止录制');
+                }
+            }, 300000); // 5分钟 = 300秒 = 300000毫秒
+        }
+
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+            
+            // 停止计时器
+            if (recordingTimer) {
+                clearInterval(recordingTimer);
+                recordingTimer = null;
+            }
+            
+            isRecording = false;
+            utils.updateRecordButton();
+        }
+
+        // 转换功能
+        async function convertVideo() {
+            if (!webmBlob || !converter) {
+                utils.log('请先录制视频或等待转换器初始化');
+                return;
+            }
+
+            const startTime = Date.now();
+
+            try {
+                utils.log('开始转换...');
+                
+                // 设置转换状态标志和开始时间
+                isConverting = true;
+                conversionStartTime = Date.now();
+                
+                // 立即设置转换状态
+                elements.downloadBtn.style.display = 'none';
+                elements.convertBtn.style.display = 'inline-block';
+                elements.convertBtn.textContent = '转换中… 0%';
+                elements.convertBtn.disabled = true;
+                
+                utils.log(`准备转换 ${videoDuration.toFixed(2)}秒 的视频`);
+
+                // 使用优化的转换器模块，启用智能参数选择
+                mp4Blob = await converter.convertWebMToMP4(webmBlob, {
+                    // 不指定preset和crf，让转换器智能选择最优参数
+                    fastMode: true        // 启用快速复制模式
+                });
+
+                const convertTime = ((Date.now() - startTime) / 1000).toFixed(2);
+                const compressionRatio = ((webmBlob.size - mp4Blob.size) / webmBlob.size * 100);
+
+                elements.mp4Size.textContent = utils.formatFileSize(mp4Blob.size);
+                elements.convertTime.textContent = convertTime + ' 秒';
+                elements.compressionRatio.textContent = compressionRatio > 0 
+                    ? `压缩 ${compressionRatio.toFixed(1)}%` 
+                    : `增大 ${Math.abs(compressionRatio).toFixed(1)}%`;
+
+                // 验证MP4文件是否可以播放
+                utils.log('正在验证MP4文件...');
+                elements.convertBtn.textContent = '验证文件中...';
+                
+                try {
+                    await utils.validateMP4(mp4Blob);
+                    
+                    // 验证成功
+                    utils.updateProgress(100);
+                    utils.log(`✅ 转换并验证成功！耗时 ${convertTime} 秒`);
+
+                    // 清除转换状态标志
+                    isConverting = false;
+
+                    // 显示并激活下载按钮
+                    elements.convertBtn.style.display = 'none';
+                    elements.downloadBtn.style.display = 'inline-block';
+                    elements.downloadBtn.disabled = false;
+                    
+                } catch (validationError) {
+                    // 验证失败
+                    utils.log(`❌ MP4文件验证失败: ${validationError.message}`);
+                    utils.log('文件可能已损坏，请重新转换');
+                    
+                    // 清除转换状态标志并重置状态
+                    isConverting = false;
+                    utils.updateProgress(0);
+                    elements.convertBtn.disabled = false;
+                    elements.convertBtn.style.display = 'inline-block';
+                    elements.downloadBtn.style.display = 'none';
+                }
+
+            } catch (error) {
+                utils.log(`转换失败: ${error.message}`);
+                
+                // 清除转换状态标志并重置状态
+                isConverting = false;
+                utils.updateProgress(0); // 重置转换按钮状态
+                console.error('转换错误:', error);
+                
+                // 确保转换按钮可以重新点击
+                elements.convertBtn.disabled = false;
+                elements.convertBtn.style.display = 'inline-block';
+                elements.downloadBtn.style.display = 'none';
+            }
+        }
+
+        // 下载功能
+        function downloadMP4() {
+            if (mp4Blob) {
+                utils.downloadFile(mp4Blob, 'converted.mp4');
+                utils.log('MP4 文件下载开始');
+            }
+        }
+
+        // 初始化应用
+        async function initApp() {
+            try {
+                utils.log('正在初始化转换器...');
+                
+                converter = new OptimizedFFmpegConverter(true); // 启用Worker模式
+                
+                // 设置回调
+                converter.setLogCallback((message) => {
+                    utils.log(message);
+                });
+                
+                converter.setProgressCallback((percent, time) => {
+                    // 解析时间字符串，提取数值
+                    let currentTime = 0;
+                    if (typeof time === 'string') {
+                        const timeMatch = time.match(/(\d+\.?\d*)/);
+                        if (timeMatch) {
+                            currentTime = parseFloat(timeMatch[1]);
+                        }
+                    } else if (typeof time === 'number') {
+                        currentTime = time;
+                    }
+                    
+                    // 过滤不稳定的初始数据 - 只关注时间数据
+                    const now = Date.now();
+                    const elapsedSeconds = (now - conversionStartTime) / 1000;
+                    
+                    // 前2秒内，或者时间数据异常时，不更新进度
+                    const isDataStable = elapsedSeconds > 2 && 
+                                       currentTime >= 0 && 
+                                       currentTime <= videoDuration * 2; // 时间不应该超过视频长度的2倍
+                    
+                    // 总是尝试更新进度（基于时间），或者当明确完成时
+                    if (isDataStable || percent === 100) {
+                        utils.updateProgress(percent, currentTime);
+                    }
+                    
+                    utils.log(`[进度] 忽略${percent}% (时间=${currentTime.toFixed(2)}s)${isDataStable ? ' [更新进度]' : ' [等待稳定]'}`);
+                });
+
+                // 初始化转换器
+                await converter.init();
+                const info = converter.getInfo();
+                utils.log('✅ 转换器初始化完成！');
+                utils.log(`转换器模式: ${info.useWorker ? 'Web Worker' : '直接模式'}`);
+                utils.log(`Worker状态: ${info.hasWorker ? '可用' : '不可用'}`);
+                utils.log(`FFmpeg状态: ${info.hasFFmpeg ? '已加载' : '未加载'}`);
+                
+                // 显示性能提示
+                if (info.useWorker) {
+                    utils.log('🚀 使用Web Worker模式，转换不会阻塞界面');
+                } else {
+                    utils.log('⚠️ 使用直接模式，转换时界面可能卡顿');
+                }
+
+                // 初始化界面状态
+                utils.updateCameraStatus(false); // 初始状态：摄像头未开启
+                utils.updateRecordButton();      // 初始按钮：开启摄像头
+
+            } catch (error) {
+                utils.log(`❌ 初始化失败: ${error.message}`);
+                console.error('初始化错误:', error);
+            }
+        }
+
+        // 事件监听器
+        elements.recordBtn.addEventListener('click', handleMainButton);
+        elements.convertBtn.addEventListener('click', convertVideo);
+        elements.downloadBtn.addEventListener('click', downloadMP4);
+        elements.closeCameraBtn.addEventListener('click', closeCamera);
+
+        // 页面加载完成后初始化
+        window.addEventListener('load', initApp);
+
+        // 页面关闭时清理资源
+        window.addEventListener('beforeunload', () => {
+            // 清理录制计时器
+            if (recordingTimer) {
+                clearInterval(recordingTimer);
+                recordingTimer = null;
+            }
+            
+            closeCamera();
+            if (converter) {
+                converter.destroy();
+            }
+        });
+    </script>
+</body>
+</html>
