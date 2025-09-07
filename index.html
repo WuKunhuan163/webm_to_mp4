@@ -173,6 +173,86 @@
             margin: 5px 0;
             color: #555;
         }
+
+        .speaker-mode-controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border: 2px dashed #ddd;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .control-group label {
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
+            white-space: nowrap;
+        }
+
+        .control-group select {
+            padding: 8px 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            background: white;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .control-group select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        }
+
+        .speaker-preview {
+            margin-top: 20px;
+        }
+
+        .speaker-preview canvas {
+            width: 100%;
+            max-width: 600px;
+            height: auto;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .speaker-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border: 2px solid #e9ecef;
+        }
+
+        .main-controls {
+            text-align: center;
+            margin: 20px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border: 2px solid #e9ecef;
+        }
     </style>
 </head>
 <body>
@@ -194,7 +274,7 @@
         </div>
 
         <div class="section">
-            <div style="text-align: center;">
+            <div class="main-controls">
                 <span class="camera-status" id="cameraStatus"></span>
                 <span id="cameraStatusText">摄像头状态</span>
                 <br><br>
@@ -236,6 +316,48 @@
             </div>
         </div>
 
+        <div class="section" id="speakerModeSection">
+            <h3>演讲者模式</h3>
+            <div class="speaker-mode-controls">
+                <div class="control-group">
+                    <label for="videoPosition">视频位置:</label>
+                    <select id="videoPosition">
+                        <option value="top-left">左上角</option>
+                        <option value="top-right">右上角</option>
+                        <option value="bottom-left">左下角</option>
+                        <option value="bottom-right" selected>右下角</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label for="videoScale">视频大小:</label>
+                    <select id="videoScale">
+                        <option value="0.12">12%</option>
+                        <option value="0.15">15%</option>
+                        <option value="0.20" selected>20%</option>
+                        <option value="0.25">25%</option>
+                        <option value="0.33">33%</option>
+                        <option value="0.40">40%</option>
+                        <option value="0.50">50%</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label for="videoMargin">边界缝隙:</label>
+                    <select id="videoMargin">
+                        <option value="0" selected>0% (紧贴边缘)</option>
+                        <option value="0.02">2%</option>
+                        <option value="0.05">5%</option>
+                        <option value="0.10">10%</option>
+                    </select>
+                </div>
+            </div>
+            <div class="speaker-buttons">
+                <button class="btn btn-primary" id="generateSpeakerVideo" disabled>合成</button>
+            </div>
+            <div class="speaker-preview" id="speakerPreview" style="display: none;">
+                <canvas id="speakerCanvas" width="1920" height="1080"></canvas>
+            </div>
+        </div>
+
         <div class="section">
             <h3>转换日志</h3>
             <div id="log" class="log">等待初始化...</div>
@@ -261,7 +383,14 @@
             convertTime: document.getElementById('convertTime'),
             compressionRatio: document.getElementById('compressionRatio'),
             cameraStatus: document.getElementById('cameraStatus'),
-            cameraStatusText: document.getElementById('cameraStatusText')
+            cameraStatusText: document.getElementById('cameraStatusText'),
+            // 演讲者模式元素
+            videoPosition: document.getElementById('videoPosition'),
+            videoScale: document.getElementById('videoScale'),
+            videoMargin: document.getElementById('videoMargin'),
+            generateSpeakerVideo: document.getElementById('generateSpeakerVideo'),
+            speakerPreview: document.getElementById('speakerPreview'),
+            speakerCanvas: document.getElementById('speakerCanvas')
         };
 
         // 状态变量
@@ -514,6 +643,10 @@
             elements.downloadBtn.style.display = 'none';
             elements.downloadBtn.disabled = true;
             elements.stats.style.display = 'none';
+            
+            // 重置演讲者模式状态
+            elements.generateSpeakerVideo.disabled = true;
+            elements.speakerPreview.style.display = 'none';
             utils.log('已重置转换状态');
         }
 
@@ -608,6 +741,14 @@
                 elements.convertBtn.disabled = false;
                 elements.convertBtn.style.display = 'inline-block';
                 elements.convertBtn.textContent = '转换为 MP4';
+                
+                // 启用演讲者模式功能
+                elements.generateSpeakerVideo.disabled = false;
+                
+                // 自动预览
+                setTimeout(() => {
+                    speakerMode.previewSpeakerMode();
+                }, 500); // 稍微延迟以确保视频元素准备好
                 
                 // 隐藏下载按钮，重置状态
                 elements.downloadBtn.style.display = 'none';
@@ -741,6 +882,221 @@
                 utils.log('MP4 文件下载开始');
             }
         }
+
+        // 演讲者模式功能
+        const speakerMode = {
+            pptImage: null,
+            pptAspectRatio: 0,
+            videoAspectRatio: 0,
+
+            // 加载PPT背景图片
+            async loadPPTImage() {
+                return new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        this.pptImage = img;
+                        this.pptAspectRatio = img.width / img.height;
+                        utils.log(`📋 PPT图片已加载: ${img.width}x${img.height} (比例: ${this.pptAspectRatio.toFixed(2)})`);
+                        resolve(img);
+                    };
+                    img.onerror = () => {
+                        utils.log('❌ PPT图片加载失败');
+                        reject(new Error('PPT图片加载失败'));
+                    };
+                    img.src = `${window.location.origin}/cover.jpg`;
+                });
+            },
+
+            // 预览
+            async previewSpeakerMode() {
+                if (!this.pptImage) {
+                    await this.loadPPTImage();
+                }
+
+                if (!elements.video.videoWidth) {
+                    utils.log('⚠️ 请先录制视频');
+                    return;
+                }
+
+                const canvas = elements.speakerCanvas;
+                const ctx = canvas.getContext('2d');
+                const scale = parseFloat(elements.videoScale.value);
+
+                // 设置画布尺寸为PPT图片尺寸
+                canvas.width = this.pptImage.width;
+                canvas.height = this.pptImage.height;
+
+                // 绘制PPT背景
+                ctx.drawImage(this.pptImage, 0, 0);
+
+                // 计算视频位置和大小
+                const videoAspectRatio = elements.video.videoWidth / elements.video.videoHeight;
+
+                let videoWidth, videoHeight;
+                
+                if (this.pptAspectRatio > videoAspectRatio) {
+                    videoHeight = canvas.height * scale;
+                    videoWidth = videoHeight * videoAspectRatio;
+                } else {
+                    videoWidth = canvas.width * scale;
+                    videoHeight = videoWidth / videoAspectRatio;
+                }
+
+                const marginPercent = parseFloat(elements.videoMargin.value);
+                const marginX = canvas.width * marginPercent;
+                const marginY = canvas.height * marginPercent;
+
+                const position = elements.videoPosition.value;
+                let x, y;
+
+                switch (position) {
+                    case 'top-left':
+                        x = marginX;
+                        y = marginY;
+                        break;
+                    case 'top-right':
+                        x = canvas.width - videoWidth - marginX;
+                        y = marginY;
+                        break;
+                    case 'bottom-left':
+                        x = marginX;
+                        y = canvas.height - videoHeight - marginY;
+                        break;
+                    case 'bottom-right':
+                    default:
+                        x = canvas.width - videoWidth - marginX;
+                        y = canvas.height - videoHeight - marginY;
+                        break;
+                }
+
+                // 绘制视频帧
+                ctx.drawImage(elements.video, x, y, videoWidth, videoHeight);
+
+                // 显示预览
+                elements.speakerPreview.style.display = 'block';
+                
+                const marginText = marginPercent === 0 ? '紧贴边缘' : `${Math.round(marginPercent*100)}%边距`;
+                utils.log(`🎬 预览生成: ${elements.videoPosition.options[elements.videoPosition.selectedIndex].text}, ${Math.round(scale*100)}%, ${marginText}`);
+            },
+
+            // 合成视频
+            async generateSpeakerVideo() {
+                if (!webmBlob) {
+                    utils.log('❌ 请先录制视频');
+                    return;
+                }
+
+                if (!this.pptImage) {
+                    await this.loadPPTImage();
+                }
+
+                utils.log('🎬 开始生成演讲者模式视频...');
+                elements.generateSpeakerVideo.disabled = true;
+                elements.generateSpeakerVideo.textContent = '合成(0%)';
+
+                try {
+                    // 计算叠加参数
+                    const scale = parseFloat(elements.videoScale.value);
+                    const position = elements.videoPosition.value;
+                    const marginPercent = parseFloat(elements.videoMargin.value);
+                    
+                    // 计算视频在PPT上的位置和大小
+                    const videoAspectRatio = elements.video.videoWidth / elements.video.videoHeight;
+                    const pptAspectRatio = this.pptAspectRatio;
+                    
+                    let videoWidth, videoHeight;
+                    if (pptAspectRatio > videoAspectRatio) {
+                        videoHeight = Math.round(this.pptImage.height * scale);
+                        videoWidth = Math.round(videoHeight * videoAspectRatio);
+                    } else {
+                        videoWidth = Math.round(this.pptImage.width * scale);
+                        videoHeight = Math.round(videoWidth / videoAspectRatio);
+                    }
+                    
+                    const marginX = Math.round(this.pptImage.width * marginPercent);
+                    const marginY = Math.round(this.pptImage.height * marginPercent);
+                    
+                    let overlayX, overlayY;
+                    switch (position) {
+                        case 'top-left':
+                            overlayX = marginX;
+                            overlayY = marginY;
+                            break;
+                        case 'top-right':
+                            overlayX = this.pptImage.width - videoWidth - marginX;
+                            overlayY = marginY;
+                            break;
+                        case 'bottom-left':
+                            overlayX = marginX;
+                            overlayY = this.pptImage.height - videoHeight - marginY;
+                            break;
+                        case 'bottom-right':
+                        default:
+                            overlayX = this.pptImage.width - videoWidth - marginX;
+                            overlayY = this.pptImage.height - videoHeight - marginY;
+                            break;
+                    }
+                    
+                    utils.log(`📐 计算结果: 视频尺寸=${videoWidth}x${videoHeight}, 位置=(${overlayX},${overlayY})`);
+                    utils.log(`📐 PPT尺寸: ${this.pptImage.width}x${this.pptImage.height}`);
+                    utils.log(`📐 视频原始尺寸: ${elements.video.videoWidth}x${elements.video.videoHeight}`);
+                    utils.log(`📐 缩放比例: ${scale}, 边距: ${marginPercent}`);
+                    
+                    // 使用转换器合成功能
+                    const speakerVideoBlob = await converter.compositeVideoWithBackground(webmBlob, {
+                        pptBackground: `${window.location.origin}/cover.jpg`,
+                        videoScale: `${videoWidth}:${videoHeight}`,
+                        overlayPosition: `${overlayX}:${overlayY}`,
+                        outputSize: `${this.pptImage.width}:${this.pptImage.height}`
+                    });
+                    
+                    // 创建下载按钮
+                    const downloadUrl = URL.createObjectURL(speakerVideoBlob);
+                    const downloadBtn = document.createElement('button');
+                    downloadBtn.textContent = '下载';
+                    downloadBtn.className = 'btn btn-success';
+                    downloadBtn.style.marginLeft = '10px';
+                    downloadBtn.onclick = () => {
+                        const link = document.createElement('a');
+                        link.href = downloadUrl;
+                        link.download = 'speaker-mode-video.mp4';
+                        link.click();
+                    };
+                    
+                    // 添加到生成按钮右边
+                    elements.generateSpeakerVideo.parentNode.insertBefore(downloadBtn, elements.generateSpeakerVideo.nextSibling);
+                    
+                    // 在网页上显示生成的演讲者视频
+                    const existingVideo = elements.speakerPreview.querySelector('.speaker-video');
+                    if (existingVideo) {
+                        existingVideo.remove();
+                    }
+                    
+                    const speakerVideo = document.createElement('video');
+                    speakerVideo.src = downloadUrl;
+                    speakerVideo.controls = true;
+                    speakerVideo.className = 'speaker-video';
+                    speakerVideo.style.cssText = 'width: 100%; max-width: 600px; margin-top: 20px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);';
+                    
+                    elements.speakerPreview.appendChild(speakerVideo);
+                    elements.speakerPreview.style.display = 'block';
+                    
+                    utils.log('✅ 演讲者模式视频生成完成！已在页面显示');
+                    
+                } catch (error) {
+                    utils.log(`❌ 生成失败: ${error.message}`);
+                } finally {
+                    elements.generateSpeakerVideo.disabled = false;
+                    elements.generateSpeakerVideo.textContent = '合成';
+                }
+            }
+        };
+
+        // 演讲者模式事件监听
+        elements.generateSpeakerVideo.addEventListener('click', () => {
+            speakerMode.generateSpeakerVideo();
+        });
+
 
         // 初始化应用
         async function initApp() {

@@ -18,6 +18,15 @@ async function initFFmpeg() {
         
         // 设置事件监听
         ffmpeg.on('log', ({ message }) => {
+            // 如果日志包含时间信息，也发送进度更新
+            if (message.includes('time=') && message.includes('fps=')) {
+                self.postMessage({
+                    type: 'progress',
+                    percent: -1, // 表示来自日志
+                    time: message // 传递完整的日志消息
+                });
+            }
+            
             self.postMessage({
                 type: 'log',
                 message: `[FFmpeg Worker] ${message}`
@@ -149,6 +158,10 @@ self.onmessage = async function(e) {
             await convertVideo(data);
             break;
             
+        case 'composite':
+            await compositeVideo(data);
+            break;
+            
         default:
             self.postMessage({
                 type: 'error',
@@ -156,3 +169,131 @@ self.onmessage = async function(e) {
             });
     }
 };
+
+// 合成视频和背景
+async function compositeVideo(data) {
+    const { videoBuffer, options } = data;
+    const { pptBackground, videoScale, overlayPosition, outputSize } = options;
+    
+    try {
+        self.postMessage({ type: 'log', message: '🎬 Worker开始背景合成...' });
+
+        // 写入视频文件
+        const videoData = new Uint8Array(videoBuffer);
+        await ffmpeg.writeFile('input_video.webm', videoData);
+        self.postMessage({ type: 'log', message: `📹 输入视频大小: ${videoData.length} bytes` });
+
+        // 获取PPT背景图片
+        self.postMessage({ type: 'log', message: '📋 加载PPT背景图片...' });
+        const response = await fetch(pptBackground);
+        if (!response.ok) {
+            throw new Error(`无法加载PPT图片: ${response.status} ${response.statusText}`);
+        }
+        
+        const pptData = new Uint8Array(await response.arrayBuffer());
+        if (pptData.length === 0) {
+            throw new Error('PPT图片数据为空');
+        }
+        
+        self.postMessage({ type: 'log', message: `📋 PPT图片大小: ${pptData.length} bytes` });
+        await ffmpeg.writeFile('background.jpg', pptData);
+        
+        // 验证图片是否正确写入
+        try {
+            const verifyData = await ffmpeg.readFile('background.jpg');
+            if (verifyData.length === 0) {
+                throw new Error('图片写入失败');
+            }
+            self.postMessage({ type: 'log', message: `📋 图片验证成功: ${verifyData.length} bytes` });
+        } catch (verifyError) {
+            throw new Error(`图片验证失败: ${verifyError.message}`);
+        }
+
+        self.postMessage({ type: 'log', message: `🎯 合成参数: 视频缩放=${videoScale}, 叠加位置=${overlayPosition}, 输出尺寸=${outputSize}` });
+        
+        // 解析参数进行验证
+        const [scaleW, scaleH] = videoScale.split(':').map(Number);
+        const [overlayX, overlayY] = overlayPosition.split(':').map(Number);
+        const [outW, outH] = outputSize.split(':').map(Number);
+        self.postMessage({ type: 'log', message: `🔍 解析参数: 视频=${scaleW}x${scaleH}, 位置=(${overlayX},${overlayY}), 输出=${outW}x${outH}` });
+
+        // 确保输出尺寸是偶数（H.264要求）
+        const [outputWidth, outputHeight] = outputSize.split(':').map(Number);
+        const evenWidth = outputWidth % 2 === 0 ? outputWidth : outputWidth + 1;
+        const evenHeight = outputHeight % 2 === 0 ? outputHeight : outputHeight + 1;
+        const evenOutputSize = `${evenWidth}:${evenHeight}`;
+        
+        self.postMessage({ type: 'log', message: `📐 调整输出尺寸: ${outputSize} -> ${evenOutputSize} (确保偶数)` });
+
+        // 构建FFmpeg命令 - 修复静态背景与动态视频叠加问题
+        const command = [
+            '-loop', '1',                     // 循环背景图片
+            '-i', 'background.jpg',           // 背景图片
+            '-i', 'input_video.webm',         // 输入视频
+            '-filter_complex', 
+            `[0:v]scale=${evenOutputSize}[bg];[1:v]scale=${videoScale}[small];[bg][small]overlay=${overlayPosition}:shortest=1[v]`,
+            '-map', '[v]',                    // 映射合成的视频流
+            '-map', '1:a',                    // 映射原视频的音频流
+            '-c:v', 'libx264',                // H.264编码
+            '-preset', 'fast',                // 快速预设
+            '-crf', '23',                     // 质量设置
+            '-c:a', 'aac',                    // AAC音频
+            '-b:a', '128k',                   // 音频比特率
+            '-pix_fmt', 'yuv420p',           // 像素格式
+            '-avoid_negative_ts', 'make_zero', // 避免时间戳问题
+            '-t', '30',                       // 限制最长30秒（防止卡死）
+            'output_composite.mp4'
+        ];
+
+        self.postMessage({ type: 'log', message: `🔧 FFmpeg合成命令: ${command.join(' ')}` });
+        
+        // 执行前检查输入文件
+        try {
+            const bgCheck = await ffmpeg.readFile('background.jpg');
+            const videoCheck = await ffmpeg.readFile('input_video.webm');
+            self.postMessage({ type: 'log', message: `✅ 执行前检查 - 背景图片: ${bgCheck.length} bytes, 视频: ${videoCheck.length} bytes` });
+        } catch (error) {
+            self.postMessage({ type: 'log', message: `❌ 执行前文件检查失败: ${error.message}` });
+        }
+        
+        self.postMessage({ type: 'log', message: '🔧 执行FFmpeg合成命令...' });
+        await ffmpeg.exec(command);
+        
+        // 执行后检查
+        self.postMessage({ type: 'log', message: '✅ FFmpeg命令执行完成，检查输出文件...' });
+
+        // 检查输出文件是否存在
+        let outputData;
+        try {
+            outputData = await ffmpeg.readFile('output_composite.mp4');
+            if (!outputData || outputData.length === 0) {
+                throw new Error('输出文件为空或不存在');
+            }
+            self.postMessage({ type: 'log', message: `📤 输出文件大小: ${outputData.length} bytes` });
+        } catch (fileError) {
+            self.postMessage({ type: 'log', message: `❌ 无法读取输出文件: ${fileError.message}` });
+            throw new Error(`合成失败：无法读取输出文件 - ${fileError.message}`);
+        }
+
+        // 验证文件大小
+        if (outputData.length < 1000) { // 小于1KB可能是无效文件
+            self.postMessage({ type: 'log', message: `❌ 输出文件太小 (${outputData.length} bytes)，可能合成失败` });
+            throw new Error('合成失败：输出文件太小，可能损坏');
+        }
+
+        // 清理临时文件
+        await ffmpeg.deleteFile('input_video.webm');
+        await ffmpeg.deleteFile('background.jpg');
+        await ffmpeg.deleteFile('output_composite.mp4');
+
+        self.postMessage({ type: 'log', message: '✅ Worker背景合成完成！' });
+        self.postMessage({ 
+            type: 'composite_complete', 
+            buffer: outputData.buffer 
+        }, [outputData.buffer]);
+
+    } catch (error) {
+        self.postMessage({ type: 'log', message: `❌ Worker合成失败: ${error.message}` });
+        self.postMessage({ type: 'error', message: error.message });
+    }
+}

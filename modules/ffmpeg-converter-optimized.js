@@ -307,6 +307,159 @@ class OptimizedFFmpegConverter {
         };
     }
 
+    // 合成视频与背景图片
+    async compositeVideoWithBackground(videoBlob, options) {
+        if (!this.isLoaded) {
+            throw new Error('转换器未初始化，请先调用 init()');
+        }
+
+        const { pptBackground, videoScale, overlayPosition, outputSize } = options;
+
+        try {
+            if (this.onLog) this.onLog('🎬 开始视频背景合成...');
+
+            if (this.useWorker && this.worker) {
+                return await this.compositeWithWorker(videoBlob, options);
+            } else {
+                return await this.compositeDirect(videoBlob, options);
+            }
+        } catch (error) {
+            if (this.onLog) this.onLog(`❌ 背景合成失败: ${error.message}`);
+            throw error;
+        }
+    }
+
+    // Worker模式合成
+    async compositeWithWorker(videoBlob, options) {
+        return new Promise(async (resolve, reject) => {
+            const startTime = Date.now();
+            
+            this.worker.onmessage = (e) => {
+                const { type, message, buffer } = e.data;
+                
+                switch (type) {
+                    case 'log':
+                        if (this.onLog) this.onLog(`[FFmpeg Worker] ${message}`);
+                        break;
+                        
+                    case 'progress':
+                        // 合成进度处理
+                        if (this.onProgress) {
+                            this.onProgress(e.data.percent, e.data.time);
+                        }
+                        break;
+                        
+                    case 'composite_complete':
+                        const convertTime = ((Date.now() - startTime) / 1000).toFixed(2);
+                        const mp4Blob = new Blob([buffer], { type: 'video/mp4' });
+                        if (this.onLog) this.onLog(`✅ Worker合成完成！耗时 ${convertTime} 秒`);
+                        resolve(mp4Blob);
+                        break;
+                        
+                    case 'error':
+                        reject(new Error(message));
+                        break;
+                }
+            };
+            
+            // 发送合成命令
+            const videoBuffer = await videoBlob.arrayBuffer();
+            this.worker.postMessage({
+                type: 'composite',
+                data: { videoBuffer, options }
+            });
+        });
+    }
+
+    // 直接模式合成
+    async compositeDirect(videoBlob, options) {
+        const { pptBackground, videoScale, overlayPosition, outputSize } = options;
+
+        try {
+            if (this.onLog) this.onLog('📹 直接模式背景合成...');
+
+            // 写入视频文件
+            const videoData = new Uint8Array(await videoBlob.arrayBuffer());
+            await this.ffmpeg.writeFile('input_video.webm', videoData);
+            if (this.onLog) this.onLog(`📹 输入视频大小: ${videoData.length} bytes`);
+
+            // 读取PPT背景图片
+            const response = await fetch(pptBackground);
+            const pptData = new Uint8Array(await response.arrayBuffer());
+            await this.ffmpeg.writeFile('background.jpg', pptData);
+            if (this.onLog) this.onLog(`📋 PPT背景图片大小: ${pptData.length} bytes`);
+
+            if (this.onLog) this.onLog(`🎯 合成参数: 视频缩放=${videoScale}, 叠加位置=${overlayPosition}, 输出尺寸=${outputSize}`);
+
+            // 确保输出尺寸是偶数（H.264要求）
+            const [outputWidth, outputHeight] = outputSize.split(':').map(Number);
+            const evenWidth = outputWidth % 2 === 0 ? outputWidth : outputWidth + 1;
+            const evenHeight = outputHeight % 2 === 0 ? outputHeight : outputHeight + 1;
+            const evenOutputSize = `${evenWidth}:${evenHeight}`;
+            
+            if (this.onLog) this.onLog(`📐 调整输出尺寸: ${outputSize} -> ${evenOutputSize} (确保偶数)`);
+
+            // 构建FFmpeg命令 - 修复静态背景与动态视频叠加问题
+            const command = [
+                '-loop', '1',                     // 循环背景图片
+                '-i', 'background.jpg',           // 背景图片
+                '-i', 'input_video.webm',         // 输入视频
+                '-filter_complex', 
+                `[0:v]scale=${evenOutputSize}[bg];[1:v]scale=${videoScale}[small];[bg][small]overlay=${overlayPosition}:shortest=1[v]`,
+                '-map', '[v]',                    // 映射合成的视频流
+                '-map', '1:a',                    // 映射原视频的音频流
+                '-c:v', 'libx264',                // H.264编码
+                '-preset', 'fast',                // 快速预设
+                '-crf', '23',                     // 质量设置
+                '-c:a', 'aac',                    // AAC音频
+                '-b:a', '128k',                   // 音频比特率
+                '-pix_fmt', 'yuv420p',           // 像素格式
+                '-t', '30',                       // 限制最长30秒（防止卡死）
+                'output_composite.mp4'
+            ];
+
+            if (this.onLog) this.onLog(`🔧 FFmpeg合成命令: ${command.join(' ')}`);
+            
+            // 执行前检查输入文件
+            try {
+                const bgCheck = await this.ffmpeg.readFile('background.jpg');
+                const videoCheck = await this.ffmpeg.readFile('input_video.webm');
+                if (this.onLog) this.onLog(`✅ 执行前检查 - 背景图片: ${bgCheck.length} bytes, 视频: ${videoCheck.length} bytes`);
+            } catch (error) {
+                if (this.onLog) this.onLog(`❌ 执行前文件检查失败: ${error.message}`);
+            }
+            
+            if (this.onLog) this.onLog('🔧 执行FFmpeg合成命令...');
+            await this.ffmpeg.exec(command);
+            
+            // 执行后检查
+            if (this.onLog) this.onLog('✅ FFmpeg命令执行完成，检查输出文件...');
+
+            // 读取输出文件
+            const outputData = await this.ffmpeg.readFile('output_composite.mp4');
+            if (this.onLog) this.onLog(`📤 输出文件大小: ${outputData.length} bytes`);
+            
+            if (outputData.length < 1000) {
+                if (this.onLog) this.onLog(`❌ 输出文件太小 (${outputData.length} bytes)，可能合成失败`);
+                throw new Error(`合成失败：输出文件太小 (${outputData.length} bytes)`);
+            }
+            
+            const compositeBlob = new Blob([outputData.buffer], { type: 'video/mp4' });
+
+            // 清理临时文件
+            await this.ffmpeg.deleteFile('input_video.webm');
+            await this.ffmpeg.deleteFile('background.jpg');
+            await this.ffmpeg.deleteFile('output_composite.mp4');
+
+            if (this.onLog) this.onLog('✅ 背景合成完成！');
+            return compositeBlob;
+
+        } catch (error) {
+            if (this.onLog) this.onLog(`❌ 背景合成失败: ${error.message}`);
+            throw error;
+        }
+    }
+
     // 清理资源
     destroy() {
         if (this.worker) {
