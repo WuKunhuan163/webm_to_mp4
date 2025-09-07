@@ -79,8 +79,8 @@ async function convertVideo(data) {
     
     const {
         preset = 'ultrafast',
-        crf = 30,                // 稍微降低质量以提升速度
-        audioBitrate = '64k',    // 降低音频比特率
+        crf = 35,                // 更激进的质量降低
+        audioBitrate = '32k',    // 极低音频比特率
         fastMode = true
     } = options;
 
@@ -101,22 +101,25 @@ async function convertVideo(data) {
         // 始终使用重编码模式以确保兼容性
         self.postMessage({ type: 'log', message: '使用重编码模式确保MP4兼容性...' });
         command = command.concat([
-            '-c:v', 'libx264',           // H.264编码
+            '-c:v', 'libx264',
             '-preset', preset,
             '-tune', 'zerolatency',
             '-crf', crf.toString(),
             '-pix_fmt', 'yuv420p',
             '-profile:v', 'baseline',
             '-level:v', '3.0',
-            // 速度优化参数
-            '-x264-params', 'ref=1:me=dia:subme=2:mixed-refs=0:trellis=0:weightp=0:weightb=0:8x8dct=0:fast-pskip=1',
-            '-g', '30',                  // GOP大小，减少复杂度
-            '-bf', '0',                  // 禁用B帧以提升速度
-            // 音频优化
+            // 极速优化参数
+            '-x264-params', 'ref=1:me=dia:subme=1:mixed-refs=0:trellis=0:weightp=0:weightb=0:8x8dct=0:fast-pskip=1:no-chroma-me=1:me-range=4:partitions=none:direct=spatial:no-deblock=1',
+            '-g', '15',                  // 更小的GOP
+            '-bf', '0',                  // 禁用B帧
+            '-keyint_min', '15',         // 最小关键帧间隔
+            '-sc_threshold', '0',        // 禁用场景切换检测
+            // 极简音频设置
             '-c:a', 'aac',
             '-b:a', audioBitrate,
-            '-ac', '2',                  // 双声道
-            '-ar', '22050',              // 降低采样率到22kHz
+            '-ac', '1',                  // 单声道以提升速度
+            '-ar', '16000',              // 进一步降低采样率到16kHz
+            '-aac_coder', 'fast',        // 使用快速AAC编码器
             '-movflags', '+faststart',
             '-threads', '0',
             '-f', 'mp4',

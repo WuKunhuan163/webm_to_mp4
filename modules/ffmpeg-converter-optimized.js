@@ -121,31 +121,31 @@ class OptimizedFFmpegConverter {
     getOptimalSettings(fileSize, duration = 5) {
         const fileSizeMB = fileSize / (1024 * 1024);
         
-        // 根据文件大小和时长智能选择参数 - 全面优化速度
+        // 根据文件大小和时长智能选择参数 - 极速模式
         if (fileSizeMB < 1) {
             // 小文件：极速模式
             return {
                 preset: 'ultrafast',
-                crf: 32,                // 更低质量，更高速度
-                audioBitrate: '48k',    // 更低音频比特率
+                crf: 38,                // 极低质量，极高速度
+                audioBitrate: '24k',    // 极低音频比特率
                 fastMode: true,
                 priority: 'speed'
             };
         } else if (fileSizeMB < 5) {
-            // 中等文件：速度优先
+            // 中等文件：高速模式
             return {
                 preset: 'ultrafast',
-                crf: 30,
-                audioBitrate: '64k',
+                crf: 35,
+                audioBitrate: '32k',
                 fastMode: true,
                 priority: 'speed'
             };
         } else {
-            // 大文件：仍然优先速度
+            // 大文件：快速模式
             return {
-                preset: 'ultrafast',    // 改为ultrafast
-                crf: 28,
-                audioBitrate: '80k',    // 降低比特率
+                preset: 'ultrafast',
+                crf: 32,
+                audioBitrate: '48k',
                 fastMode: true,
                 priority: 'speed'
             };

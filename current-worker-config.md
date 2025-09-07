@@ -15,20 +15,23 @@
 converter = new OptimizedFFmpegConverter(true); // 启用Worker模式
 ```
 
-#### FFmpeg编码参数 (速度优化版)
+#### FFmpeg编码参数 (激进速度优化版)
 ```javascript
 // 普通转换 - 极速模式
 {
     preset: 'ultrafast',     // 最快编码预设
-    crf: 30-32,              // 降低质量以提升速度
-    audioBitrate: '48k-80k', // 降低音频比特率
-    audioSampleRate: '22050', // 降低采样率到22kHz
+    crf: 32-38,              // 极低质量以获得极高速度
+    audioBitrate: '24k-48k', // 极低音频比特率
+    audioChannels: 1,        // 单声道以提升速度
+    audioSampleRate: '16000', // 降低采样率到16kHz
     threads: 0,              // 使用所有CPU核心
     tune: 'zerolatency',     // 零延迟调优
-    // x264速度优化参数
-    x264params: 'ref=1:me=dia:subme=2:mixed-refs=0:trellis=0:weightp=0:weightb=0:8x8dct=0:fast-pskip=1',
-    gop: 30,                 // 减少GOP复杂度
-    bframes: 0               // 禁用B帧
+    // x264极速优化参数
+    x264params: 'ref=1:me=dia:subme=1:mixed-refs=0:trellis=0:weightp=0:weightb=0:8x8dct=0:fast-pskip=1:no-chroma-me=1:me-range=4:partitions=none:direct=spatial:no-deblock=1',
+    gop: 15,                 // 更小的GOP
+    bframes: 0,              // 禁用B帧
+    scenecut: 0,             // 禁用场景切换检测
+    aacCoder: 'fast'         // 快速AAC编码器
 }
 
 // 演讲者模式合成
@@ -68,12 +71,13 @@ tune: 'zerolatency'    // 零延迟调优
 threads: 0             // 多线程并行
 ```
 
-### 7. 质量平衡 (速度优化)
-- **小文件**: CRF 32, 音频 48k (极速模式)
-- **中等文件**: CRF 30, 音频 64k (高速模式)
-- **大文件**: CRF 28, 音频 80k (快速模式)
-- **采样率**: 22kHz (降低50%以提升速度)
-- **演讲者模式**: CRF 23, 音频 128k
+### 7. 质量平衡 (激进速度优化)
+- **小文件**: CRF 38, 音频 24k, 单声道 (极速模式)
+- **中等文件**: CRF 35, 音频 32k, 单声道 (高速模式)
+- **大文件**: CRF 32, 音频 48k, 单声道 (快速模式)
+- **采样率**: 16kHz (降低64%以最大化速度)
+- **声道**: 单声道 (减少50%音频处理负担)
+- **演讲者模式**: CRF 23, 音频 128k, 双声道
 
 ### 8. 兼容性配置
 ```javascript
