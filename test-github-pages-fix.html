@@ -137,19 +137,30 @@
                 log(`⚡ FFmpeg WASM URL: ${wasmURL}`);
                 
                 // 测试资源可访问性
-                log('🔍 开始验证资源可访问性...');
+                log('🔍 开始验证本地资源可访问性...');
                 
                 const moduleAccessible = await GitHubPagesConfig.validateResourceURL(ffmpegModuleURL, log);
                 const coreAccessible = await GitHubPagesConfig.validateResourceURL(coreURL, log);
                 const wasmAccessible = await GitHubPagesConfig.validateResourceURL(wasmURL, log);
                 
-                if (moduleAccessible && coreAccessible && wasmAccessible) {
-                    log('✅ 所有资源都可以访问');
-                    return true;
+                log('🌐 测试CDN回退资源...');
+                const cdnUrls = GitHubPagesConfig.getCDNUrls();
+                const cdnModuleAccessible = await GitHubPagesConfig.validateResourceURL(cdnUrls.ffmpegModule, log);
+                const cdnCoreAccessible = await GitHubPagesConfig.validateResourceURL(cdnUrls.ffmpegCore, log);
+                const cdnWasmAccessible = await GitHubPagesConfig.validateResourceURL(cdnUrls.ffmpegWasm, log);
+                
+                const localResourcesOK = moduleAccessible && coreAccessible && wasmAccessible;
+                const cdnResourcesOK = cdnModuleAccessible && cdnCoreAccessible && cdnWasmAccessible;
+                
+                if (localResourcesOK) {
+                    log('✅ 本地资源可用');
+                } else if (cdnResourcesOK) {
+                    log('✅ CDN资源可用（本地资源不可用）');
                 } else {
-                    log('❌ 部分资源无法访问');
-                    return false;
+                    log('❌ 本地和CDN资源都不可用');
                 }
+                
+                return localResourcesOK || cdnResourcesOK;
                 
             } catch (error) {
                 log(`❌ 配置类测试失败: ${error.message}`);

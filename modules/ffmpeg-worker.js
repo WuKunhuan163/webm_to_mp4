@@ -55,17 +55,17 @@ async function initFFmpeg() {
             });
         });
 
-        // 加载FFmpeg核心 - GitHub Pages兼容版本
-        const loadConfig = GitHubPagesConfig.getLoadConfig('worker');
+        // 加载FFmpeg核心 - GitHub Pages兼容版本，带CDN回退
+        const { config: loadConfig, source } = await GitHubPagesConfig.getLoadConfigWithFallback('worker', logCallback);
         
         self.postMessage({
             type: 'log',
-            message: `[FFmpeg Worker] 加载核心文件: ${loadConfig.coreURL}`
+            message: `[FFmpeg Worker] 使用${source === 'local' ? '本地' : 'CDN'}核心文件: ${loadConfig.coreURL}`
         });
         
         self.postMessage({
             type: 'log',
-            message: `[FFmpeg Worker] 加载WASM文件: ${loadConfig.wasmURL}`
+            message: `[FFmpeg Worker] 使用${source === 'local' ? '本地' : 'CDN'}WASM文件: ${loadConfig.wasmURL}`
         });
         
         await ffmpeg.load(loadConfig);
