@@ -475,11 +475,15 @@
                     // 转换时禁用录制和合成按钮
                     elements.recordBtn.disabled = true;
                     elements.generateSpeakerVideo.disabled = true;
+                    // 更新状态显示
+                    utils.updateStatusMessage('转换中...', 'converting');
                 } else if (operationType === '合成') {
                     isCompositing = true;
                     // 合成时禁用录制和转换按钮
                     elements.recordBtn.disabled = true;
                     elements.convertBtn.disabled = true;
+                    // 更新状态显示
+                    utils.updateStatusMessage('合成中...', 'compositing');
                 }
                 utils.log(`🔒 开始${operationType}，其他操作已锁定`);
             },
@@ -503,6 +507,16 @@
                 if (webmBlob && !isConverting && !isCompositing) {
                     elements.generateSpeakerVideo.disabled = false;
                 }
+                
+                // 恢复摄像头状态显示（如果不是录制结束）
+                if (operationType !== '录制') {
+                    if (cameraInitialized && stream) {
+                        utils.updateCameraStatus(true);
+                    } else {
+                        utils.updateStatusMessage('摄像头未开启', 'default');
+                    }
+                }
+                
                 utils.log(`🔓 ${operationType}完成，操作锁定已解除`);
             }
         };
@@ -709,7 +723,7 @@
                 }
             },
 
-            // 更新状态消息（摄像头状态或转换状态）
+            // 更新状态消息（摄像头状态或操作状态）
             updateStatusMessage: (message, type = 'default') => {
                 elements.cameraStatusText.textContent = message;
                 
@@ -722,6 +736,12 @@
                         elements.cameraStatus.className = 'camera-status camera-off';
                         break;
                     case 'recording':
+                        elements.cameraStatus.className = 'camera-status camera-on';
+                        break;
+                    case 'converting':
+                        elements.cameraStatus.className = 'camera-status camera-on';
+                        break;
+                    case 'compositing':
                         elements.cameraStatus.className = 'camera-status camera-on';
                         break;
                     default:
