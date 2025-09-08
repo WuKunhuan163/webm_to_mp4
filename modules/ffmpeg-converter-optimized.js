@@ -4,7 +4,7 @@
  * 不使用SharedArrayBuffer，确保GitHub Pages兼容性
  */
 
-import SimpleFFmpegConfig from './simple-ffmpeg-config.js';
+import DirectFFmpegConfig from './direct-ffmpeg-config.js';
 
 class OptimizedFFmpegConverter {
     constructor(useWorker = true) {
@@ -87,7 +87,7 @@ class OptimizedFFmpegConverter {
             // GitHub Pages兼容版本 - 动态构建模块路径
             const logCallback = this.onLog ? this.onLog.bind(this) : null;
             
-            const module = await SimpleFFmpegConfig.loadFFmpegWithRetry('window', logCallback);
+            const module = await DirectFFmpegConfig.loadFFmpegWithRetry('window', logCallback);
             const { FFmpeg } = module;
             this.ffmpeg = new FFmpeg();
 
@@ -105,7 +105,7 @@ class OptimizedFFmpegConverter {
             });
 
             // 加载FFmpeg核心 - 使用最简化路径
-            const { config: loadConfig, valid } = await SimpleFFmpegConfig.validateLoadConfig('window', logCallback);
+            const { config: loadConfig, valid } = await DirectFFmpegConfig.validateLoadConfig('window', logCallback);
             
             if (!valid) {
                 throw new Error('所需的FFmpeg核心文件不可访问');
