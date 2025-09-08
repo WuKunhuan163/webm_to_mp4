@@ -719,10 +719,36 @@
             elements.downloadBtn.disabled = true;
             elements.stats.style.display = 'none';
             
+            // 强制停止任何正在进行的合成
+            const isGenerating = elements.generateSpeakerVideo.textContent.includes('点击停止');
+            if (isGenerating) {
+                // 强制取消转换器
+                if (converter && converter.cancelConversion) {
+                    converter.cancelConversion();
+                }
+                utils.log('强制停止进行中的合成');
+            }
+            
             // 重置演讲者模式状态
             elements.generateSpeakerVideo.disabled = true;
+            elements.generateSpeakerVideo.textContent = '合成';
             elements.speakerPreview.style.display = 'none';
-            utils.log('已重置转换状态');
+            
+            // 重新启用预览选项
+            elements.videoPosition.disabled = false;
+            elements.videoScale.disabled = false;
+            elements.videoMargin.disabled = false;
+            
+            // 清除已合成的视频
+            const existingVideo = elements.speakerPreview.querySelector('.speaker-video');
+            if (existingVideo) {
+                existingVideo.remove();
+            }
+            
+            // 显示预览图
+            elements.speakerCanvas.style.display = 'block';
+            
+            utils.log('已重置转换和演讲者模式状态');
         }
 
         function startRecording() {
@@ -1326,9 +1352,40 @@
                 // 如果正在合成，则取消合成
                 utils.log('用户请求取消演讲者模式合成');
                 
-                // 取消转换器
-                if (converter && converter.cancelConversion) {
-                    converter.cancelConversion();
+                // 强制取消转换器和Worker
+                if (converter) {
+                    if (converter.cancelConversion) {
+                        converter.cancelConversion();
+                    }
+                    // 强制重新初始化转换器以确保Worker完全停止
+                    try {
+                        converter.destroy();
+                        converter = new OptimizedFFmpegConverter(true);
+                        converter.setLogCallback((message) => {
+                            utils.log(message);
+                        });
+                        converter.setProgressCallback((percent, time) => {
+                            if (!progressCalculator) {
+                                let totalDuration = actualRecordingDuration > 0 ? actualRecordingDuration : 
+                                                  (videoDuration > 0 ? videoDuration : recordingSeconds);
+                                progressCalculator = FFmpegProgressCalculator.create(totalDuration, {
+                                    skipInitialSeconds: 2,
+                                    enableDebugLog: false,
+                                    logCallback: utils.log
+                                });
+                            }
+                            const result = progressCalculator.calculateProgress(percent, time);
+                            if (result.isValid || result.percent === 100) {
+                                utils.updateProgress(result.percent, result.time);
+                            }
+                        });
+                        // 重新初始化转换器
+                        converter.init().catch(error => {
+                            utils.log(`转换器重新初始化失败: ${error.message}`);
+                        });
+                    } catch (error) {
+                        utils.log(`转换器重置失败: ${error.message}`);
+                    }
                 }
                 
                 // 重置状态
@@ -1349,7 +1406,7 @@
                     }, 100);
                 }
                 
-                utils.log('演讲者模式合成已取消，预览选项已解锁');
+                utils.log('演讲者模式合成已取消');
                 
             } else {
                 // 如果没有在合成，开始合成
