@@ -4,7 +4,7 @@
  * 不使用SharedArrayBuffer，确保GitHub Pages兼容性
  */
 
-import DirectFFmpegConfig from './direct-ffmpeg-config.js';
+import SimpleFFmpegConfig from './simple-ffmpeg-config.js';
 
 let ffmpeg = null;
 let isLoaded = false;
@@ -24,7 +24,7 @@ async function initFFmpeg() {
             });
         };
         
-        const module = await DirectFFmpegConfig.loadFFmpegWithRetry('worker', logCallback);
+        const module = await SimpleFFmpegConfig.loadFFmpegWithRetry('worker', logCallback);
         const { FFmpeg } = module;
         ffmpeg = new FFmpeg();
         
@@ -55,8 +55,8 @@ async function initFFmpeg() {
             });
         });
 
-        // 加载FFmpeg核心 - 使用直接路径
-        const { config: loadConfig, valid } = await DirectFFmpegConfig.validateLoadConfig('worker', logCallback);
+        // 加载FFmpeg核心 - 使用最简化路径
+        const { config: loadConfig, valid } = await SimpleFFmpegConfig.validateLoadConfig('worker', logCallback);
         
         if (!valid) {
             throw new Error('所需的FFmpeg核心文件不可访问');
@@ -64,12 +64,12 @@ async function initFFmpeg() {
         
         self.postMessage({
             type: 'log',
-            message: `[FFmpeg Worker] 使用直接路径核心文件: ${loadConfig.coreURL}`
+            message: `[FFmpeg Worker] 使用简化路径核心文件: ${loadConfig.coreURL}`
         });
         
         self.postMessage({
             type: 'log',
-            message: `[FFmpeg Worker] 使用直接路径WASM文件: ${loadConfig.wasmURL}`
+            message: `[FFmpeg Worker] 使用简化路径WASM文件: ${loadConfig.wasmURL}`
         });
         
         await ffmpeg.load(loadConfig);
