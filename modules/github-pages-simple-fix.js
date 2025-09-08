@@ -19,17 +19,17 @@ export class GitHubPagesSimpleFix {
 
     static getFFmpegModuleURL(context = 'window') {
         const baseURL = this.getBaseURL(context);
-        return baseURL + 'node_modules/@ffmpeg/ffmpeg/dist/esm/index.js';
+        return baseURL + 'ffmpeg-libs/ffmpeg/ffmpeg/dist/esm/index.js';
     }
 
     static getFFmpegCoreURL(context = 'window') {
         const baseURL = this.getBaseURL(context);
-        return baseURL + 'node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.js';
+        return baseURL + 'ffmpeg-libs/ffmpeg/core/dist/esm/ffmpeg-core.js';
     }
 
     static getFFmpegWasmURL(context = 'window') {
         const baseURL = this.getBaseURL(context);
-        return baseURL + 'node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.wasm';
+        return baseURL + 'ffmpeg-libs/ffmpeg/core/dist/esm/ffmpeg-core.wasm';
     }
 
     static async validateResourceURL(url, logCallback = null) {

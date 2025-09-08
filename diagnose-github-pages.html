@@ -186,9 +186,9 @@
                 <div>仓库名: <code>${repoName}</code></div>
             `;
             
-            const ffmpegModuleURL = baseURL + 'node_modules/@ffmpeg/ffmpeg/dist/esm/index.js';
-            const ffmpegCoreURL = baseURL + 'node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.js';
-            const ffmpegWasmURL = baseURL + 'node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.wasm';
+            const ffmpegModuleURL = baseURL + 'ffmpeg-libs/ffmpeg/ffmpeg/dist/esm/index.js';
+            const ffmpegCoreURL = baseURL + 'ffmpeg-libs/ffmpeg/core/dist/esm/ffmpeg-core.js';
+            const ffmpegWasmURL = baseURL + 'ffmpeg-libs/ffmpeg/core/dist/esm/ffmpeg-core.wasm';
             
             pathInfo.innerHTML = `
                 <div>FFmpeg模块: <code>${ffmpegModuleURL}</code></div>
@@ -251,9 +251,9 @@
                 
                 // 构建资源URL
                 const resources = {
-                    'FFmpeg模块': baseURL + 'node_modules/@ffmpeg/ffmpeg/dist/esm/index.js',
-                    'FFmpeg核心': baseURL + 'node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.js',
-                    'FFmpeg WASM': baseURL + 'node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.wasm'
+                    'FFmpeg模块': baseURL + 'ffmpeg-libs/ffmpeg/ffmpeg/dist/esm/index.js',
+                    'FFmpeg核心': baseURL + 'ffmpeg-libs/ffmpeg/core/dist/esm/ffmpeg-core.js',
+                    'FFmpeg WASM': baseURL + 'ffmpeg-libs/ffmpeg/core/dist/esm/ffmpeg-core.wasm'
                 };
                 
                 log('');
