@@ -4,7 +4,7 @@
  * 不使用SharedArrayBuffer，确保GitHub Pages兼容性
  */
 
-import DirectFFmpegConfig from './direct-ffmpeg-config.js';
+import PathResolver from './path-resolver.js';
 
 let ffmpeg = null;
 let isLoaded = false;
@@ -24,7 +24,7 @@ async function initFFmpeg() {
             });
         };
         
-        const module = await DirectFFmpegConfig.loadFFmpegWithRetry('worker', logCallback);
+        const module = await PathResolver.loadFFmpegWithRetry('worker', logCallback);
         const { FFmpeg } = module;
         ffmpeg = new FFmpeg();
         
@@ -56,7 +56,7 @@ async function initFFmpeg() {
         });
 
         // 加载FFmpeg核心 - 使用最简化路径
-        const { config: loadConfig, valid } = await DirectFFmpegConfig.validateLoadConfig('worker', logCallback);
+        const { config: loadConfig, valid } = await PathResolver.validateLoadConfig('worker', logCallback);
         
         if (!valid) {
             throw new Error('所需的FFmpeg核心文件不可访问');

@@ -393,6 +393,7 @@
     <script type="module">
         import OptimizedFFmpegConverter from './modules/ffmpeg-converter-optimized.js';
         import FFmpegProgressCalculator from './modules/ffmpeg-progress-calculator.js';
+        import PathResolver from './modules/path-resolver.js';
 
         // DOM 元素
         const elements = {
@@ -1087,7 +1088,7 @@
                         utils.log('❌ PPT图片加载失败');
                         reject(new Error('PPT图片加载失败'));
                     };
-                    img.src = './cover.jpg';
+                    img.src = PathResolver.resolveAsset('cover.jpg');
                 });
             },
 
@@ -1261,7 +1262,7 @@
                     
                     // 使用转换器合成功能
                     const speakerVideoBlob = await converter.compositeVideoWithBackground(webmBlob, {
-                        pptBackground: './cover.jpg',
+                        pptBackground: PathResolver.resolveAsset('cover.jpg'),
                         videoScale: `${videoWidth}:${videoHeight}`,
                         overlayPosition: `${overlayX}:${overlayY}`,
                         outputSize: `${this.pptImage.width}:${this.pptImage.height}`,
