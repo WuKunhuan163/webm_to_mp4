@@ -197,9 +197,12 @@ async function convertVideo(data) {
 function cancelCurrentTask() {
     isCancelled = true;
     if (currentTask) {
-        self.postMessage({ type: 'log', message: 'Worker收到取消请求' });
-        // 注意：FFmpeg.wasm没有直接的取消方法，但我们可以设置标志
-        // 实际的取消会在下次检查点生效
+        self.postMessage({ type: 'log', message: '🛑 Worker收到取消请求，准备强制终止' });
+        // FFmpeg.wasm无法中途取消，强制关闭Worker是唯一可靠方式
+        setTimeout(() => {
+            self.postMessage({ type: 'log', message: '🛑 强制关闭Worker进程' });
+            self.close();
+        }, 100); // 短暂延迟确保消息发送
     }
 }
 
@@ -372,7 +375,21 @@ async function compositeVideo(data) {
             self.postMessage({ type: 'log', message: `❌ 执行前文件检查失败: ${error.message}` });
         }
         
+        // 执行前检查取消状态
+        if (isCancelled) {
+            self.postMessage({ type: 'log', message: '🛑 任务已取消，停止执行' });
+            throw new Error('Task cancelled before execution');
+        }
+        
         self.postMessage({ type: 'log', message: '🔧 执行FFmpeg合成命令...' });
+        
+        // 由于FFmpeg.wasm无法中途取消，我们需要在这里强制重启Worker
+        if (isCancelled) {
+            self.postMessage({ type: 'log', message: '🛑 强制终止Worker进程' });
+            self.close(); // 强制关闭Worker
+            return;
+        }
+        
         await ffmpeg.exec(command);
         
         // 执行后检查
