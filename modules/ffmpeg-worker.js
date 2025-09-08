@@ -108,20 +108,23 @@ async function convertVideo(data) {
             '-pix_fmt', 'yuv420p',
             '-profile:v', 'baseline',
             '-level:v', '3.0',
-            // 极速优化参数
-            '-x264-params', 'ref=1:me=dia:subme=1:mixed-refs=0:trellis=0:weightp=0:weightb=0:8x8dct=0:fast-pskip=1:no-chroma-me=1:me-range=4:partitions=none:direct=spatial:no-deblock=1',
-            '-g', '15',                  // 更小的GOP
+            // 修复帧率和时间戳问题
+            '-r', '30',                  // 强制输出帧率为30fps
+            '-vsync', 'cfr',             // 恒定帧率，避免重复帧
+            '-fps_mode', 'cfr',          // 确保恒定帧率模式
+            // 极速优化参数（简化）
+            '-x264-params', 'ref=1:me=dia:subme=1:mixed-refs=0:trellis=0:weightp=0:weightb=0:8x8dct=0:fast-pskip=1',
+            '-g', '30',                  // 恢复合理的GOP大小
             '-bf', '0',                  // 禁用B帧
-            '-keyint_min', '15',         // 最小关键帧间隔
-            '-sc_threshold', '0',        // 禁用场景切换检测
-            // 极简音频设置
+            '-sc_threshold', '40',       // 恢复场景切换检测但设置较高阈值
+            // 音频设置
             '-c:a', 'aac',
             '-b:a', audioBitrate,
-            '-ac', '1',                  // 单声道以提升速度
-            '-ar', '16000',              // 进一步降低采样率到16kHz
-            '-aac_coder', 'fast',        // 使用快速AAC编码器
+            '-ac', '1',                  // 单声道
+            '-ar', '16000',              // 16kHz采样率
             '-movflags', '+faststart',
             '-threads', '0',
+            '-avoid_negative_ts', 'make_zero', // 修复时间戳问题
             '-f', 'mp4',
             'output.mp4'
         ]);
@@ -214,6 +217,8 @@ self.onmessage = async function(e) {
             break;
             
         case 'convert':
+            // 转换前先重置状态
+            await resetWorkerState();
             currentTask = 'convert';
             isCancelled = false;
             await convertVideo(data);
@@ -221,6 +226,8 @@ self.onmessage = async function(e) {
             break;
             
         case 'composite':
+            // 合成前先重置状态
+            await resetWorkerState();
             currentTask = 'composite';
             isCancelled = false;
             await compositeVideo(data);
