@@ -13,10 +13,10 @@ export class PathResolver {
         let baseURL;
         
         if (context === 'worker') {
-            // 在Worker中，使用self.location
-            baseURL = new URL('./', self.location.href).href;
+            // 在Worker中，Worker文件在modules目录下，需要回到项目根目录
+            baseURL = new URL('../', self.location.href).href;
         } else {
-            // 在主线程中，使用window.location
+            // 在主线程中，使用当前目录
             baseURL = new URL('./', window.location.href).href;
         }
         
