@@ -4,6 +4,8 @@
  * 不使用SharedArrayBuffer，确保GitHub Pages兼容性
  */
 
+import GitHubPagesConfig from './github-pages-config.js';
+
 class OptimizedFFmpegConverter {
     constructor(useWorker = true) {
         this.useWorker = useWorker;
@@ -82,7 +84,11 @@ class OptimizedFFmpegConverter {
         try {
             if (this.onLog) this.onLog('正在初始化 FFmpeg (直接模式)...');
             
-            const { FFmpeg } = await import('../node_modules/@ffmpeg/ffmpeg/dist/esm/index.js');
+            // GitHub Pages兼容版本 - 动态构建模块路径
+            const logCallback = this.onLog ? this.onLog.bind(this) : null;
+            
+            const module = await GitHubPagesConfig.loadFFmpegWithRetry('window', logCallback);
+            const { FFmpeg } = module;
             this.ffmpeg = new FFmpeg();
 
             // 设置事件监听
@@ -98,15 +104,13 @@ class OptimizedFFmpegConverter {
                 }
             });
 
-            // 加载FFmpeg核心
-            const baseURL = new URL('../', window.location.href).href;
-            const coreURL = baseURL + 'node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.js';
-            const wasmURL = baseURL + 'node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.wasm';
+            // 加载FFmpeg核心 - GitHub Pages兼容版本
+            const loadConfig = GitHubPagesConfig.getLoadConfig('window');
             
-            await this.ffmpeg.load({
-                coreURL: coreURL,
-                wasmURL: wasmURL,
-            });
+            if (this.onLog) this.onLog(`加载核心文件: ${loadConfig.coreURL}`);
+            if (this.onLog) this.onLog(`加载WASM文件: ${loadConfig.wasmURL}`);
+            
+            await this.ffmpeg.load(loadConfig);
 
             this.isLoaded = true;
             if (this.onLog) this.onLog('✅ FFmpeg 直接模式初始化完成！');

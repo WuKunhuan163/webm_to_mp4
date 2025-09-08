@@ -4,6 +4,8 @@
  * 不使用SharedArrayBuffer，确保GitHub Pages兼容性
  */
 
+import GitHubPagesConfig from './github-pages-config.js';
+
 let ffmpeg = null;
 let isLoaded = false;
 let currentTask = null; // 当前执行的任务
@@ -14,8 +16,16 @@ async function initFFmpeg() {
     if (isLoaded) return;
     
     try {
-        // 在Worker中导入FFmpeg
-        const { FFmpeg } = await import('../node_modules/@ffmpeg/ffmpeg/dist/esm/index.js');
+        // 在Worker中导入FFmpeg - GitHub Pages兼容版本
+        const logCallback = (message) => {
+            self.postMessage({
+                type: 'log',
+                message: `[FFmpeg Worker] ${message}`
+            });
+        };
+        
+        const module = await GitHubPagesConfig.loadFFmpegWithRetry('worker', logCallback);
+        const { FFmpeg } = module;
         ffmpeg = new FFmpeg();
         
         // 设置事件监听
@@ -45,15 +55,20 @@ async function initFFmpeg() {
             });
         });
 
-        // 加载FFmpeg核心
-        const baseURL = new URL('../', self.location.href).href;
-        const coreURL = baseURL + 'node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.js';
-        const wasmURL = baseURL + 'node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.wasm';
+        // 加载FFmpeg核心 - GitHub Pages兼容版本
+        const loadConfig = GitHubPagesConfig.getLoadConfig('worker');
         
-        await ffmpeg.load({
-            coreURL: coreURL,
-            wasmURL: wasmURL,
+        self.postMessage({
+            type: 'log',
+            message: `[FFmpeg Worker] 加载核心文件: ${loadConfig.coreURL}`
         });
+        
+        self.postMessage({
+            type: 'log',
+            message: `[FFmpeg Worker] 加载WASM文件: ${loadConfig.wasmURL}`
+        });
+        
+        await ffmpeg.load(loadConfig);
 
         isLoaded = true;
         self.postMessage({

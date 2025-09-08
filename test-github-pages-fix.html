@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub Pages 修复测试</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .log {
+            background: #2d2d2d;
+            color: #f0f0f0;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            margin: 20px 0;
+        }
+        
+        .btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        
+        .btn:hover {
+            background: #0056b3;
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .status {
+            padding: 10px;
+            border-radius: 6px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>GitHub Pages 修复验证测试</h1>
+        <p>此页面用于测试 FFmpeg 模块在 GitHub Pages 环境下的加载情况</p>
+        
+        <div id="status" class="status info">准备测试...</div>
+        
+        <button id="testBtn" class="btn">开始测试</button>
+        <button id="clearBtn" class="btn">清空日志</button>
+        
+        <div id="log" class="log">等待开始测试...</div>
+    </div>
+
+    <script type="module">
+        // 测试日志功能
+        const logElement = document.getElementById('log');
+        const statusElement = document.getElementById('status');
+        const testBtn = document.getElementById('testBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            console.log(message);
+            logElement.textContent += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+        
+        function updateStatus(message, type = 'info') {
+            statusElement.textContent = message;
+            statusElement.className = `status ${type}`;
+        }
+        
+        function clearLog() {
+            logElement.textContent = '日志已清空\n';
+        }
+        
+        // 测试配置类
+        async function testGitHubPagesConfig() {
+            try {
+                log('🔧 开始测试 GitHub Pages 配置类...');
+                
+                const { default: GitHubPagesConfig } = await import('./modules/github-pages-config.js');
+                log('✅ GitHub Pages 配置类加载成功');
+                
+                // 测试URL生成
+                const baseURL = GitHubPagesConfig.getBaseURL('window');
+                log(`📍 基础URL: ${baseURL}`);
+                
+                const ffmpegModuleURL = GitHubPagesConfig.getFFmpegModuleURL('window');
+                log(`📦 FFmpeg模块URL: ${ffmpegModuleURL}`);
+                
+                const coreURL = GitHubPagesConfig.getFFmpegCoreURL('window');
+                log(`🔧 FFmpeg核心URL: ${coreURL}`);
+                
+                const wasmURL = GitHubPagesConfig.getFFmpegWasmURL('window');
+                log(`⚡ FFmpeg WASM URL: ${wasmURL}`);
+                
+                // 测试资源可访问性
+                log('🔍 开始验证资源可访问性...');
+                
+                const moduleAccessible = await GitHubPagesConfig.validateResourceURL(ffmpegModuleURL, log);
+                const coreAccessible = await GitHubPagesConfig.validateResourceURL(coreURL, log);
+                const wasmAccessible = await GitHubPagesConfig.validateResourceURL(wasmURL, log);
+                
+                if (moduleAccessible && coreAccessible && wasmAccessible) {
+                    log('✅ 所有资源都可以访问');
+                    return true;
+                } else {
+                    log('❌ 部分资源无法访问');
+                    return false;
+                }
+                
+            } catch (error) {
+                log(`❌ 配置类测试失败: ${error.message}`);
+                return false;
+            }
+        }
+        
+        // 测试FFmpeg转换器
+        async function testFFmpegConverter() {
+            try {
+                log('🎬 开始测试 FFmpeg 转换器...');
+                
+                const { default: OptimizedFFmpegConverter } = await import('./modules/ffmpeg-converter-optimized.js');
+                log('✅ FFmpeg转换器类加载成功');
+                
+                const converter = new OptimizedFFmpegConverter(true);
+                
+                // 设置日志回调
+                converter.setLogCallback((message) => {
+                    log(`[FFmpeg] ${message}`);
+                });
+                
+                log('🚀 开始初始化转换器...');
+                await converter.init();
+                
+                const info = converter.getInfo();
+                log(`📊 转换器信息:`);
+                log(`  - 已加载: ${info.isLoaded}`);
+                log(`  - 使用Worker: ${info.useWorker}`);
+                log(`  - Worker可用: ${info.hasWorker}`);
+                log(`  - FFmpeg已加载: ${info.hasFFmpeg}`);
+                
+                if (info.isLoaded) {
+                    log('✅ FFmpeg转换器初始化成功');
+                    return true;
+                } else {
+                    log('❌ FFmpeg转换器初始化失败');
+                    return false;
+                }
+                
+            } catch (error) {
+                log(`❌ FFmpeg转换器测试失败: ${error.message}`);
+                console.error('转换器错误详情:', error);
+                return false;
+            }
+        }
+        
+        // 主测试函数
+        async function runTests() {
+            testBtn.disabled = true;
+            updateStatus('测试进行中...', 'info');
+            log('🏁 开始GitHub Pages兼容性测试');
+            
+            try {
+                // 测试1: 配置类
+                const configTest = await testGitHubPagesConfig();
+                
+                if (!configTest) {
+                    updateStatus('配置测试失败', 'error');
+                    log('💥 测试中止：配置类测试失败');
+                    return;
+                }
+                
+                // 测试2: FFmpeg转换器
+                const converterTest = await testFFmpegConverter();
+                
+                if (converterTest) {
+                    updateStatus('所有测试通过！GitHub Pages修复成功', 'success');
+                    log('🎉 所有测试都通过了！GitHub Pages修复方案有效');
+                } else {
+                    updateStatus('FFmpeg转换器测试失败', 'error');
+                    log('💥 FFmpeg转换器测试失败，可能需要进一步调试');
+                }
+                
+            } catch (error) {
+                updateStatus(`测试过程出错: ${error.message}`, 'error');
+                log(`💥 测试过程中出现错误: ${error.message}`);
+                console.error('测试错误:', error);
+            } finally {
+                testBtn.disabled = false;
+                log('🏁 测试完成');
+            }
+        }
+        
+        // 事件监听
+        testBtn.addEventListener('click', runTests);
+        clearBtn.addEventListener('click', clearLog);
+        
+        // 页面加载完成后的提示
+        window.addEventListener('load', () => {
+            log('页面加载完成，可以开始测试');
+            updateStatus('准备就绪，点击开始测试', 'info');
+        });
+    </script>
+</body>
+</html>
