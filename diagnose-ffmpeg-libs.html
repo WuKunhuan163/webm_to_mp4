@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FFmpeg-Libs 诊断工具</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+        
+        .section {
+            margin-bottom: 25px;
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .section h3 {
+            color: #333;
+            margin-top: 0;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 5px;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+            transition: all 0.3s ease;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .log {
+            background: #2d2d2d;
+            color: #f0f0f0;
+            padding: 20px;
+            border-radius: 10px;
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 13px;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            margin: 15px 0;
+            line-height: 1.4;
+        }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        .info-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .info-item strong {
+            color: #333;
+            display: block;
+            margin-bottom: 5px;
+        }
+        
+        .info-item code {
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 12px;
+            word-break: break-all;
+        }
+        
+        .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .status.warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔧 FFmpeg-Libs 诊断工具</h1>
+            <div class="subtitle">专为GitHub Pages部署设计的FFmpeg库诊断工具</div>
+        </div>
+        
+        <div class="section">
+            <h3>📍 环境信息</h3>
+            <div class="info-grid" id="envInfo">
+                <div class="info-item">
+                    <strong>当前URL</strong>
+                    <code id="currentUrl">加载中...</code>
+                </div>
+                <div class="info-item">
+                    <strong>基础URL</strong>
+                    <code id="baseUrl">加载中...</code>
+                </div>
+                <div class="info-item">
+                    <strong>域名</strong>
+                    <code id="hostname">加载中...</code>
+                </div>
+                <div class="info-item">
+                    <strong>路径</strong>
+                    <code id="pathname">加载中...</code>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h3>📦 FFmpeg-Libs 路径配置</h3>
+            <div class="info-grid" id="pathInfo">
+                <div class="info-item">
+                    <strong>FFmpeg模块</strong>
+                    <code id="ffmpegModulePath">加载中...</code>
+                </div>
+                <div class="info-item">
+                    <strong>FFmpeg核心</strong>
+                    <code id="ffmpegCorePath">加载中...</code>
+                </div>
+                <div class="info-item">
+                    <strong>FFmpeg WASM</strong>
+                    <code id="ffmpegWasmPath">加载中...</code>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h3>🧪 诊断测试</h3>
+            <div style="text-align: center; margin-bottom: 20px;">
+                <button class="btn" id="startDiagnosis">开始完整诊断</button>
+                <button class="btn" id="testPaths">仅测试路径</button>
+                <button class="btn" id="testModule">测试模块加载</button>
+                <button class="btn" id="clearLog">清空日志</button>
+            </div>
+            
+            <div class="progress-bar" id="progressBar" style="display: none;">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            
+            <div id="log" class="log">等待开始诊断...</div>
+        </div>
+        
+        <div class="section">
+            <h3>📊 测试结果摘要</h3>
+            <div id="resultSummary">
+                <p>尚未进行测试</p>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // DOM 元素
+        const elements = {
+            currentUrl: document.getElementById('currentUrl'),
+            baseUrl: document.getElementById('baseUrl'),
+            hostname: document.getElementById('hostname'),
+            pathname: document.getElementById('pathname'),
+            ffmpegModulePath: document.getElementById('ffmpegModulePath'),
+            ffmpegCorePath: document.getElementById('ffmpegCorePath'),
+            ffmpegWasmPath: document.getElementById('ffmpegWasmPath'),
+            startDiagnosis: document.getElementById('startDiagnosis'),
+            testPaths: document.getElementById('testPaths'),
+            testModule: document.getElementById('testModule'),
+            clearLog: document.getElementById('clearLog'),
+            log: document.getElementById('log'),
+            progressBar: document.getElementById('progressBar'),
+            progressFill: document.getElementById('progressFill'),
+            resultSummary: document.getElementById('resultSummary')
+        };
+        
+        // 全局变量
+        let testResults = {
+            pathTests: {},
+            moduleTest: null,
+            overallStatus: 'pending'
+        };
+        
+        // 工具函数
+        const utils = {
+            log: (message, type = 'info') => {
+                const timestamp = new Date().toLocaleTimeString();
+                const prefix = type === 'error' ? '❌' : type === 'success' ? '✅' : type === 'warning' ? '⚠️' : 'ℹ️';
+                console.log(message);
+                elements.log.textContent += `[${timestamp}] ${prefix} ${message}\n`;
+                elements.log.scrollTop = elements.log.scrollHeight;
+            },
+            
+            clearLog: () => {
+                elements.log.textContent = '日志已清空\n';
+            },
+            
+            updateProgress: (percent) => {
+                elements.progressFill.style.width = `${percent}%`;
+                if (percent > 0) {
+                    elements.progressBar.style.display = 'block';
+                }
+                if (percent >= 100) {
+                    setTimeout(() => {
+                        elements.progressBar.style.display = 'none';
+                    }, 1000);
+                }
+            },
+            
+            getBaseURL: () => {
+                return new URL('./', window.location.href).href;
+            },
+            
+            updateResultSummary: () => {
+                const pathCount = Object.keys(testResults.pathTests).length;
+                const successCount = Object.values(testResults.pathTests).filter(r => r === true).length;
+                const moduleStatus = testResults.moduleTest === true ? '成功' : 
+                                   testResults.moduleTest === false ? '失败' : '未测试';
+                
+                elements.resultSummary.innerHTML = `
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <strong>路径测试</strong>
+                            ${successCount}/${pathCount} 通过
+                            <span class="status ${successCount === pathCount && pathCount > 0 ? 'success' : 'error'}">
+                                ${successCount === pathCount && pathCount > 0 ? '全部通过' : '有失败'}
+                            </span>
+                        </div>
+                        <div class="info-item">
+                            <strong>模块加载</strong>
+                            ${moduleStatus}
+                            <span class="status ${testResults.moduleTest === true ? 'success' : testResults.moduleTest === false ? 'error' : 'warning'}">
+                                ${testResults.moduleTest === true ? '成功' : testResults.moduleTest === false ? '失败' : '未测试'}
+                            </span>
+                        </div>
+                    </div>
+                `;
+            }
+        };
+        
+        // 初始化环境信息
+        function initEnvironmentInfo() {
+            const baseURL = utils.getBaseURL();
+            
+            elements.currentUrl.textContent = window.location.href;
+            elements.baseUrl.textContent = baseURL;
+            elements.hostname.textContent = window.location.hostname;
+            elements.pathname.textContent = window.location.pathname;
+            
+            // FFmpeg路径配置
+            const ffmpegModulePath = baseURL + 'ffmpeg-libs/ffmpeg/ffmpeg/dist/esm/index.js';
+            const ffmpegCorePath = baseURL + 'ffmpeg-libs/ffmpeg/core/dist/esm/ffmpeg-core.js';
+            const ffmpegWasmPath = baseURL + 'ffmpeg-libs/ffmpeg/core/dist/esm/ffmpeg-core.wasm';
+            
+            elements.ffmpegModulePath.textContent = ffmpegModulePath;
+            elements.ffmpegCorePath.textContent = ffmpegCorePath;
+            elements.ffmpegWasmPath.textContent = ffmpegWasmPath;
+            
+            utils.log('环境信息初始化完成');
+        }
+        
+        // 测试单个资源URL
+        async function testResourceURL(url, name) {
+            try {
+                utils.log(`正在测试 ${name}: ${url}`);
+                
+                const response = await fetch(url, { 
+                    method: 'HEAD',
+                    cache: 'no-cache'
+                });
+                
+                if (response.ok) {
+                    const size = response.headers.get('content-length');
+                    const sizeInfo = size ? ` (${Math.round(size / 1024)}KB)` : '';
+                    utils.log(`${name} 可访问${sizeInfo}`, 'success');
+                    testResults.pathTests[name] = true;
+                    return true;
+                } else {
+                    utils.log(`${name} 不可访问 - HTTP ${response.status}`, 'error');
+                    testResults.pathTests[name] = false;
+                    return false;
+                }
+            } catch (error) {
+                utils.log(`${name} 测试失败: ${error.message}`, 'error');
+                testResults.pathTests[name] = false;
+                return false;
+            }
+        }
+        
+        // 测试所有路径
+        async function testAllPaths() {
+            utils.log('开始测试所有FFmpeg资源路径...');
+            
+            const baseURL = utils.getBaseURL();
+            const resources = {
+                'FFmpeg模块': baseURL + 'ffmpeg-libs/ffmpeg/ffmpeg/dist/esm/index.js',
+                'FFmpeg核心': baseURL + 'ffmpeg-libs/ffmpeg/core/dist/esm/ffmpeg-core.js',
+                'FFmpeg WASM': baseURL + 'ffmpeg-libs/ffmpeg/core/dist/esm/ffmpeg-core.wasm'
+            };
+            
+            let successCount = 0;
+            const totalCount = Object.keys(resources).length;
+            
+            for (const [name, url] of Object.entries(resources)) {
+                const success = await testResourceURL(url, name);
+                if (success) successCount++;
+                
+                // 更新进度
+                utils.updateProgress((Object.keys(testResults.pathTests).length / totalCount) * 50);
+                
+                // 短暂延迟以避免过快请求
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            
+            utils.log(`\n路径测试完成: ${successCount}/${totalCount} 成功`);
+            utils.updateResultSummary();
+            
+            return successCount === totalCount;
+        }
+        
+        // 测试模块加载
+        async function testModuleLoading() {
+            utils.log('\n开始测试FFmpeg模块加载...');
+            
+            try {
+                const baseURL = utils.getBaseURL();
+                const moduleURL = baseURL + 'ffmpeg-libs/ffmpeg/ffmpeg/dist/esm/index.js';
+                
+                utils.log(`尝试导入模块: ${moduleURL}`);
+                
+                const module = await import(moduleURL);
+                
+                if (module && typeof module === 'object') {
+                    const exports = Object.keys(module);
+                    utils.log(`模块加载成功，导出: ${exports.join(', ')}`, 'success');
+                    
+                    if (module.FFmpeg) {
+                        utils.log('FFmpeg类可用', 'success');
+                        testResults.moduleTest = true;
+                    } else {
+                        utils.log('FFmpeg类不可用', 'warning');
+                        testResults.moduleTest = false;
+                    }
+                } else {
+                    utils.log('模块加载成功但内容异常', 'warning');
+                    testResults.moduleTest = false;
+                }
+                
+                utils.updateProgress(100);
+                utils.updateResultSummary();
+                
+                return testResults.moduleTest;
+                
+            } catch (error) {
+                utils.log(`模块加载失败: ${error.message}`, 'error');
+                console.error('模块加载错误详情:', error);
+                testResults.moduleTest = false;
+                utils.updateProgress(100);
+                utils.updateResultSummary();
+                return false;
+            }
+        }
+        
+        // 完整诊断
+        async function runFullDiagnosis() {
+            utils.log('🚀 开始完整诊断...\n');
+            
+            // 重置结果
+            testResults = {
+                pathTests: {},
+                moduleTest: null,
+                overallStatus: 'running'
+            };
+            
+            try {
+                // 阶段1: 测试路径
+                utils.log('📍 阶段1: 测试资源路径可访问性');
+                const pathsOk = await testAllPaths();
+                
+                if (!pathsOk) {
+                    utils.log('\n❌ 路径测试失败，跳过模块加载测试', 'error');
+                    testResults.overallStatus = 'failed';
+                    utils.updateResultSummary();
+                    return;
+                }
+                
+                // 阶段2: 测试模块加载
+                utils.log('\n📦 阶段2: 测试模块加载');
+                const moduleOk = await testModuleLoading();
+                
+                // 最终结果
+                if (pathsOk && moduleOk) {
+                    utils.log('\n🎉 完整诊断通过！FFmpeg-libs配置正常', 'success');
+                    testResults.overallStatus = 'success';
+                } else {
+                    utils.log('\n⚠️ 诊断发现问题，请检查上述错误信息', 'warning');
+                    testResults.overallStatus = 'partial';
+                }
+                
+            } catch (error) {
+                utils.log(`\n💥 诊断过程中出现错误: ${error.message}`, 'error');
+                console.error('诊断错误:', error);
+                testResults.overallStatus = 'error';
+            }
+            
+            utils.updateResultSummary();
+        }
+        
+        // 事件监听
+        elements.startDiagnosis.addEventListener('click', async () => {
+            elements.startDiagnosis.disabled = true;
+            try {
+                await runFullDiagnosis();
+            } finally {
+                elements.startDiagnosis.disabled = false;
+            }
+        });
+        
+        elements.testPaths.addEventListener('click', async () => {
+            elements.testPaths.disabled = true;
+            try {
+                await testAllPaths();
+            } finally {
+                elements.testPaths.disabled = false;
+            }
+        });
+        
+        elements.testModule.addEventListener('click', async () => {
+            elements.testModule.disabled = true;
+            try {
+                await testModuleLoading();
+            } finally {
+                elements.testModule.disabled = false;
+            }
+        });
+        
+        elements.clearLog.addEventListener('click', utils.clearLog);
+        
+        // 页面加载完成后初始化
+        window.addEventListener('load', () => {
+            initEnvironmentInfo();
+            utils.log('FFmpeg-Libs 诊断工具已就绪');
+        });
+    </script>
+</body>
+</html>
