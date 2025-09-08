@@ -302,8 +302,6 @@
                 log('🔧 调试信息:');
                 log(`   User-Agent: ${navigator.userAgent}`);
                 log(`   Referrer: ${document.referrer || 'none'}`);
-                log(`   支持模块: ${typeof import === 'function' ? '是' : '否'}`);
-                log(`   支持Fetch: ${typeof fetch === 'function' ? '是' : '否'}`);
                 
             } catch (error) {
                 log(`💥 诊断过程中出现错误: ${error.message}`);
