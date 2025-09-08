@@ -1087,7 +1087,7 @@
                         utils.log('❌ PPT图片加载失败');
                         reject(new Error('PPT图片加载失败'));
                     };
-                    img.src = `${window.location.origin}/cover.jpg`;
+                    img.src = './cover.jpg';
                 });
             },
 
@@ -1261,7 +1261,7 @@
                     
                     // 使用转换器合成功能
                     const speakerVideoBlob = await converter.compositeVideoWithBackground(webmBlob, {
-                        pptBackground: `${window.location.origin}/cover.jpg`,
+                        pptBackground: './cover.jpg',
                         videoScale: `${videoWidth}:${videoHeight}`,
                         overlayPosition: `${overlayX}:${overlayY}`,
                         outputSize: `${this.pptImage.width}:${this.pptImage.height}`,
