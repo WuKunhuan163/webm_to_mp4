@@ -445,6 +445,11 @@
         // 互斥操作状态管理
         let isCompositing = false; // 合成状态标志
         let operationInProgress = false; // 任何操作正在进行的标志
+        
+        // 摄像头状态稳定检测
+        let cameraStatusCheckCount = 0; // 连续检测计数器
+        let lastCameraStatus = null; // 上次检测到的状态
+        const CAMERA_STATUS_STABLE_COUNT = 3; // 需要连续3次相同状态才确认
 
         // 操作状态管理函数
         const operationManager = {
@@ -645,19 +650,38 @@
             },
 
             updateCameraStatus: (isOn, isRecording = false, seconds = 0) => {
+                // 如果正在录制，直接更新状态，不需要稳定检测
                 if (isRecording) {
                     elements.cameraStatus.className = 'camera-status camera-on';
                     elements.cameraStatusText.textContent = `录制中… (${seconds}秒)`;
                     elements.closeCameraBtn.style.display = 'none';
-                } else if (isOn) {
-                    elements.cameraStatus.className = 'camera-status camera-on';
-                    elements.cameraStatusText.textContent = '摄像头已开启';
-                    elements.closeCameraBtn.style.display = 'inline-block';
-                    elements.closeCameraBtn.disabled = false;
+                    return;
+                }
+                
+                // 对非录制状态进行稳定检测
+                const currentStatus = isOn ? 'on' : 'off';
+                
+                if (currentStatus === lastCameraStatus) {
+                    // 状态相同，增加计数
+                    cameraStatusCheckCount++;
                 } else {
-                    elements.cameraStatus.className = 'camera-status camera-off';
-                    elements.cameraStatusText.textContent = '摄像头未开启';
-                    elements.closeCameraBtn.style.display = 'none';
+                    // 状态变化，重置计数
+                    cameraStatusCheckCount = 1;
+                    lastCameraStatus = currentStatus;
+                }
+                
+                // 只有连续检测到相同状态达到阈值才更新UI
+                if (cameraStatusCheckCount >= CAMERA_STATUS_STABLE_COUNT) {
+                    if (isOn) {
+                        elements.cameraStatus.className = 'camera-status camera-on';
+                        elements.cameraStatusText.textContent = '摄像头已开启';
+                        elements.closeCameraBtn.style.display = 'inline-block';
+                        elements.closeCameraBtn.disabled = false;
+                    } else {
+                        elements.cameraStatus.className = 'camera-status camera-off';
+                        elements.cameraStatusText.textContent = '摄像头未开启';
+                        elements.closeCameraBtn.style.display = 'none';
+                    }
                 }
             },
 
@@ -709,6 +733,49 @@
             }
         };
 
+        // 摄像头状态检测定时器
+        let cameraStatusTimer = null;
+        
+        // 检测摄像头是否真正可用
+        function checkCameraStatus() {
+            if (!stream) {
+                utils.updateCameraStatus(false);
+                return;
+            }
+            
+            // 检查流的活跃状态
+            const videoTracks = stream.getVideoTracks();
+            const audioTracks = stream.getAudioTracks();
+            
+            const hasActiveVideo = videoTracks.some(track => track.readyState === 'live');
+            const hasActiveAudio = audioTracks.some(track => track.readyState === 'live');
+            
+            // 只要有一个轨道是活跃的就认为摄像头开启
+            const isCameraActive = hasActiveVideo || hasActiveAudio;
+            
+            if (!isRecording) {
+                utils.updateCameraStatus(isCameraActive);
+            }
+        }
+        
+        // 启动摄像头状态监控
+        function startCameraStatusMonitoring() {
+            if (cameraStatusTimer) {
+                clearInterval(cameraStatusTimer);
+            }
+            
+            // 每秒检测一次摄像头状态
+            cameraStatusTimer = setInterval(checkCameraStatus, 1000);
+        }
+        
+        // 停止摄像头状态监控
+        function stopCameraStatusMonitoring() {
+            if (cameraStatusTimer) {
+                clearInterval(cameraStatusTimer);
+                cameraStatusTimer = null;
+            }
+        }
+
         // 初始化摄像头
         async function initCamera() {
             try {
@@ -724,6 +791,9 @@
                 utils.updateVideoFormatIndicator(null); // 摄像头预览不显示格式
                 utils.log('摄像头初始化成功');
                 
+                // 启动状态监控
+                startCameraStatusMonitoring();
+                
             } catch (error) {
                 cameraInitialized = false;
                 utils.updateCameraStatus(false);
@@ -734,6 +804,9 @@
 
         // 关闭摄像头
         function closeCamera() {
+            // 停止状态监控
+            stopCameraStatusMonitoring();
+            
             if (stream) {
                 stream.getTracks().forEach(track => {
                     track.stop();
@@ -742,6 +815,11 @@
                 stream = null;
                 elements.video.srcObject = null;
                 cameraInitialized = false;
+                
+                // 重置状态检测计数器
+                cameraStatusCheckCount = 0;
+                lastCameraStatus = null;
+                
                 utils.updateCameraStatus(false);
                 utils.updateRecordButton();
                 utils.log('摄像头已关闭');
@@ -1672,6 +1750,9 @@
                 clearInterval(recordingTimer);
                 recordingTimer = null;
             }
+            
+            // 清理摄像头状态监控定时器
+            stopCameraStatusMonitoring();
             
             closeCamera();
             if (converter) {
