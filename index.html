@@ -441,6 +441,66 @@
         let conversionStartTime = 0; // 转换开始时间
         let currentConversionPromise = null; // 当前转换的Promise，用于取消
         let progressCalculator = null; // 进度计算器实例
+        
+        // 互斥操作状态管理
+        let isCompositing = false; // 合成状态标志
+        let operationInProgress = false; // 任何操作正在进行的标志
+
+        // 操作状态管理函数
+        const operationManager = {
+            // 检查是否可以开始新操作
+            canStartOperation: (operationType) => {
+                if (operationInProgress) {
+                    const currentOp = isRecording ? '录制' : isConverting ? '转换' : isCompositing ? '合成' : '未知操作';
+                    utils.log(`❌ 无法开始${operationType}：${currentOp}正在进行中`);
+                    return false;
+                }
+                return true;
+            },
+            
+            // 开始操作
+            startOperation: (operationType) => {
+                operationInProgress = true;
+                if (operationType === '录制') {
+                    // 录制时禁用转换和合成按钮
+                    elements.convertBtn.disabled = true;
+                    elements.generateSpeakerVideo.disabled = true;
+                } else if (operationType === '转换') {
+                    isConverting = true;
+                    // 转换时禁用录制和合成按钮
+                    elements.recordBtn.disabled = true;
+                    elements.generateSpeakerVideo.disabled = true;
+                } else if (operationType === '合成') {
+                    isCompositing = true;
+                    // 合成时禁用录制和转换按钮
+                    elements.recordBtn.disabled = true;
+                    elements.convertBtn.disabled = true;
+                }
+                utils.log(`🔒 开始${operationType}，其他操作已锁定`);
+            },
+            
+            // 结束操作
+            endOperation: (operationType) => {
+                operationInProgress = false;
+                if (operationType === '转换') {
+                    isConverting = false;
+                } else if (operationType === '合成') {
+                    isCompositing = false;
+                }
+                
+                // 重新启用所有按钮（根据状态）
+                if (!isRecording) {
+                    elements.recordBtn.disabled = false;
+                }
+                if (webmBlob && !isConverting && !isCompositing) {
+                    elements.convertBtn.disabled = false;
+                }
+                if (webmBlob && !isConverting && !isCompositing) {
+                    elements.generateSpeakerVideo.disabled = false;
+                }
+                utils.log(`🔓 ${operationType}完成，操作锁定已解除`);
+            }
+        };
 
         // 工具函数
         const utils = {
@@ -756,9 +816,15 @@
                 utils.log('请先初始化摄像头');
                 return;
             }
+            
+            // 检查是否可以开始录制
+            if (!operationManager.canStartOperation('录制')) {
+                return;
+            }
 
             recordedChunks = [];
             isRecording = true;
+            operationManager.startOperation('录制');
             recordingSeconds = 0;
             recordingStartTime = Date.now(); // 记录精确的开始时间
             actualRecordingDuration = 0;
@@ -909,6 +975,7 @@
             }
             
             isRecording = false;
+            operationManager.endOperation('录制');
             utils.updateRecordButton();
         }
 
@@ -916,6 +983,11 @@
         async function convertVideo() {
             if (!webmBlob || !converter) {
                 utils.log('请先录制视频或等待转换器初始化');
+                return;
+            }
+            
+            // 检查是否可以开始转换
+            if (!operationManager.canStartOperation('转换')) {
                 return;
             }
 
@@ -928,7 +1000,7 @@
                 progressCalculator = null;
                 
                 // 设置转换状态标志和开始时间
-                isConverting = true;
+                operationManager.startOperation('转换');
                 conversionStartTime = Date.now();
                 
                 // 立即设置转换状态 - 按钮可交互用于取消
@@ -971,7 +1043,7 @@
                     utils.updateStatusMessage('转换成功', 'success');
 
                     // 清除转换状态标志
-                    isConverting = false;
+                    operationManager.endOperation('转换');
                     currentConversionPromise = null;
 
                     // 显示并激活下载按钮
@@ -993,7 +1065,7 @@
                     utils.updateStatusMessage('转换失败', 'error');
                     
                     // 清除转换状态标志并重置状态
-                    isConverting = false;
+                    operationManager.endOperation('转换');
                     currentConversionPromise = null;
                     utils.updateProgress(0);
                     elements.convertBtn.disabled = false;
@@ -1024,7 +1096,7 @@
                 }
                 
                 // 清除转换状态标志并重置状态
-                isConverting = false;
+                operationManager.endOperation('转换');
                 currentConversionPromise = null;
                 utils.updateProgress(0); // 重置转换按钮状态
                 
@@ -1180,12 +1252,18 @@
                     utils.log('❌ 请先录制视频');
                     return;
                 }
+                
+                // 检查是否可以开始合成
+                if (!operationManager.canStartOperation('合成')) {
+                    return;
+                }
 
                 if (!this.pptImage) {
                     await this.loadPPTImage();
                 }
 
                 utils.log('🎬 开始生成演讲者模式视频...');
+                operationManager.startOperation('合成');
                 elements.generateSpeakerVideo.disabled = false; // 保持可交互用于取消
                 elements.generateSpeakerVideo.textContent = '点击停止 (0%)';
 
@@ -1314,6 +1392,9 @@
                     // 更新状态消息为合成成功
                     utils.updateStatusMessage('合成成功', 'success');
                     
+                    // 结束合成操作
+                    operationManager.endOperation('合成');
+                    
                     // 5秒后恢复摄像头状态显示
                     setTimeout(() => {
                         utils.updateStatusMessage('摄像头未开启', 'default');
@@ -1324,6 +1405,9 @@
                     
                     // 更新状态消息为合成失败
                     utils.updateStatusMessage('合成失败', 'error');
+                    
+                    // 结束合成操作
+                    operationManager.endOperation('合成');
                     
                     // 5秒后恢复摄像头状态显示
                     setTimeout(() => {
@@ -1407,6 +1491,9 @@
                 }
                 
                 utils.log('演讲者模式合成已取消，转换器已重置');
+                
+                // 结束合成操作
+                operationManager.endOperation('合成');
                 
             } else {
                 // 如果没有在合成，开始合成
