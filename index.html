@@ -1081,11 +1081,11 @@
                     img.onload = () => {
                         this.pptImage = img;
                         this.pptAspectRatio = img.width / img.height;
-                        utils.log(`📋 PPT图片已加载: ${img.width}x${img.height} (比例: ${this.pptAspectRatio.toFixed(2)})`);
+                        utils.log(`[PathResolver v2.0] 📋 PPT图片已加载: ${img.width}x${img.height} (比例: ${this.pptAspectRatio.toFixed(2)})`);
                         resolve(img);
                     };
                     img.onerror = () => {
-                        utils.log('❌ PPT图片加载失败');
+                        utils.log('[PathResolver v2.0] ❌ PPT图片加载失败');
                         reject(new Error('PPT图片加载失败'));
                     };
                     img.src = PathResolver.resolveAsset('cover.jpg');
@@ -1508,8 +1508,40 @@
         elements.closeCameraBtn.addEventListener('click', closeCamera);
         elements.copyLogBtn.addEventListener('click', copyLog);
 
+        // 预加载图片资源并验证路径
+        async function preloadAssets() {
+            try {
+                const coverPath = PathResolver.resolveAsset('cover.jpg');
+                utils.log(`[PathResolver v2.0] 预加载cover.jpg: ${coverPath}`);
+                
+                // 测试图片是否可以访问
+                const response = await fetch(coverPath, { method: 'HEAD' });
+                if (response.ok) {
+                    utils.log(`[PathResolver v2.0] ✅ cover.jpg预加载成功 (${response.status})`);
+                } else {
+                    utils.log(`[PathResolver v2.0] ❌ cover.jpg预加载失败 (${response.status})`);
+                }
+                
+                // 预加载图片到缓存
+                const img = new Image();
+                img.onload = () => {
+                    utils.log(`[PathResolver v2.0] ✅ cover.jpg图片缓存完成 (${img.width}x${img.height})`);
+                };
+                img.onerror = () => {
+                    utils.log(`[PathResolver v2.0] ❌ cover.jpg图片加载失败`);
+                };
+                img.src = coverPath;
+                
+            } catch (error) {
+                utils.log(`[PathResolver v2.0] ❌ 预加载过程出错: ${error.message}`);
+            }
+        }
+
         // 页面加载完成后初始化
-        window.addEventListener('load', initApp);
+        window.addEventListener('load', async () => {
+            await preloadAssets();
+            initApp();
+        });
 
         // 页面关闭时清理资源
         window.addEventListener('beforeunload', () => {

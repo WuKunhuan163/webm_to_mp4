@@ -14,10 +14,10 @@ export class PathResolver {
         
         if (context === 'worker') {
             // 在Worker中，使用self.location
-            baseURL = new URL('../', self.location.href).href;
+            baseURL = new URL('./', self.location.href).href;
         } else {
             // 在主线程中，使用window.location
-            baseURL = new URL('../', window.location.href).href;
+            baseURL = new URL('./', window.location.href).href;
         }
         
         // 确保URL以斜杠结尾
