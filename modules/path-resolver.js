@@ -16,7 +16,7 @@ export class PathResolver {
             // 在Worker中，Worker文件在modules目录下，需要回到项目根目录
             baseURL = new URL('../', self.location.href).href;
         } else {
-            // 在主线程中，使用当前目录
+            // 在主线程中，使用当前目录（项目根目录）
             baseURL = new URL('./', window.location.href).href;
         }
         
@@ -46,8 +46,15 @@ export class PathResolver {
      * @returns {string} 完整的FFmpeg库文件URL
      */
     static resolveFFmpegLib(libPath, context = 'window') {
-        const baseURL = this.getBaseURL(context);
-        return baseURL + 'ffmpeg-libs/' + libPath;
+        if (context === 'worker') {
+            // Worker在modules目录下，可以直接访问同级的ffmpeg-libs
+            const baseURL = new URL('./', self.location.href).href;
+            return baseURL + 'ffmpeg-libs/' + libPath;
+        } else {
+            // 主线程需要访问modules下的ffmpeg-libs
+            const baseURL = this.getBaseURL(context);
+            return baseURL + 'modules/ffmpeg-libs/' + libPath;
+        }
     }
     
     /**
