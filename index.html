@@ -525,7 +525,7 @@
         const utils = {
             log: (message) => {
                 const timestamp = new Date().toLocaleTimeString();
-                console.log(message);
+                // console.log(message);
                 elements.log.textContent += `[${timestamp}] ${message}\n`;
                 elements.log.scrollTop = elements.log.scrollHeight;
             },

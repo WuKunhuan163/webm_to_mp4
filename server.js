@@ -4,7 +4,7 @@ const https = require('https');
 const fs = require('fs');
 
 const app = express();
-const PORT = 8001;
+const PORT = process.argv[2] || 8001;
 
 // 设置静态文件服务
 app.use(express.static('.', {
@@ -64,6 +64,6 @@ if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
 }
 
 // 生成自签名证书的说明
-console.log('\n📋 如需HTTPS支持，请运行以下命令生成自签名证书:');
-console.log('openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes');
-console.log('然后重启服务器即可使用HTTPS\n');
+// console.log('\n📋 如需HTTPS支持，请运行以下命令生成自签名证书:');
+// console.log('openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes');
+// console.log('然后重启服务器即可使用HTTPS\n');
